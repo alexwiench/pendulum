@@ -1,3 +1,4 @@
 import { moveAnchorPoint } from "./anchor";
 import { createNull } from "./nulls";
-export { moveAnchorPoint, createNull };
+import { applyBezierEasing } from "./easing";
+export { moveAnchorPoint, createNull, applyBezierEasing };
