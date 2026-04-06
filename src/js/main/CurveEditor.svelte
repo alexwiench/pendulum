@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { evalTS } from "../lib/utils/bolt";
 
   // --- State ---
   let p1 = $state({ x: 0.25, y: 0.0 });
@@ -383,7 +384,21 @@
   }
 
   function handleApply() {
-    console.log("Apply easing:", bezierString, { p1, p2 });
+    let x1: number, y1: number, x2: number, y2: number;
+    if (viewMode === "graph") {
+      x1 = influenceIn / 100;
+      y1 = 0;
+      x2 = 1 - influenceOut / 100;
+      y2 = 1;
+    } else {
+      x1 = p1.x;
+      y1 = p1.y;
+      x2 = p2.x;
+      y2 = p2.y;
+    }
+    evalTS("applyBezierEasing", x1, y1, x2, y2).catch((e: any) => {
+      console.error("applyBezierEasing error:", e);
+    });
   }
 
   // --- Reactive redraw ---
