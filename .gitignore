@@ -5,6 +5,9 @@ node_modules/
 dist/
 build/
 
+# Bolt CEP local plugin
+vite-cep-plugin/
+
 # ZXP packages
 *.zxp
 
