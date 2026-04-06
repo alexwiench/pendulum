@@ -3,6 +3,7 @@
   import { subscribeBackgroundColor } from "../lib/utils/bolt";
   import "../index.scss";
   import "./main.scss";
+  import CurveEditor from "./CurveEditor.svelte";
   import AnchorGrid from "./AnchorGrid.svelte";
   import NullCreator from "./NullCreator.svelte";
 
@@ -17,6 +18,10 @@
 
 <div class="app" style="background-color: {backgroundColor};">
   <div class="panel">
+    <div class="section">
+      <h3 class="section-title">Easing</h3>
+      <CurveEditor />
+    </div>
     <div class="section">
       <h3 class="section-title">Anchor Point</h3>
       <AnchorGrid />
