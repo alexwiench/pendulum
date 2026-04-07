@@ -96,16 +96,26 @@ export const applyBezierEasing = (
     var layer = layers[i];
 
     // Collect all keyframed properties on this layer
-    var props: Property[] = [];
-    collectKeyframedProperties(layer as PropertyGroup, props);
+    var allProps: Property[] = [];
+    collectKeyframedProperties(layer as PropertyGroup, allProps);
+
+    // First pass: only properties with selected keyframes
+    var selectedProps: Property[] = [];
+    for (var sp = 0; sp < allProps.length; sp++) {
+      if (allProps[sp].selectedKeys && allProps[sp].selectedKeys.length > 0) {
+        selectedProps.push(allProps[sp]);
+      }
+    }
+
+    // Use selected properties if any, otherwise fall back to all
+    var props = selectedProps.length > 0 ? selectedProps : allProps;
 
     for (var p = 0; p < props.length; p++) {
       var prop = props[p];
       var easeDims = getEaseDimensions(prop);
       var multiDim = isMultiDimValue(prop);
 
-      // Determine which keys to process:
-      // Use selectedKeys if available, otherwise apply to all keyframes
+      // Use selectedKeys if available, otherwise all keyframes
       var keys: number[] = [];
       if (prop.selectedKeys && prop.selectedKeys.length > 0) {
         for (var s = 0; s < prop.selectedKeys.length; s++) {
@@ -224,4 +234,118 @@ export const applyBezierEasing = (
 
   app.endUndoGroup();
   return "Modified " + totalKeysModified + " keyframes";
+};
+
+/**
+ * Reads the easing of all selected keyframe pairs and returns
+ * an array of bezier control points, one per property.
+ */
+export const getSelectedKeyframeEasing = () => {
+  var comp = getActiveComp();
+  if (!comp) return [];
+
+  var layers = comp.selectedLayers;
+  if (!layers || layers.length === 0) return [];
+
+  var results: Array<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    fps: number;
+    duration: number;
+    name: string;
+  }> = [];
+
+  for (var i = 0; i < layers.length; i++) {
+    var layer = layers[i];
+    var allProps: Property[] = [];
+    collectKeyframedProperties(layer as PropertyGroup, allProps);
+
+    // Prefer properties with selected keyframes
+    var selectedProps: Property[] = [];
+    for (var sp = 0; sp < allProps.length; sp++) {
+      if (allProps[sp].selectedKeys && allProps[sp].selectedKeys.length > 0) {
+        selectedProps.push(allProps[sp]);
+      }
+    }
+    var props = selectedProps.length > 0 ? selectedProps : allProps;
+
+    for (var p = 0; p < props.length; p++) {
+      var prop = props[p];
+      var multiDim = isMultiDimValue(prop);
+
+      var keys: number[] = [];
+      if (prop.selectedKeys && prop.selectedKeys.length > 0) {
+        for (var s = 0; s < prop.selectedKeys.length; s++) {
+          keys.push(prop.selectedKeys[s]);
+        }
+      } else {
+        for (var ki = 1; ki <= prop.numKeys; ki++) {
+          keys.push(ki);
+        }
+      }
+
+      // Find first pair of adjacent keyframes for this property
+      for (var k = 0; k < keys.length - 1; k++) {
+        var k1 = keys[k];
+        var k2 = keys[k + 1];
+
+        if (
+          prop.keyOutInterpolationType(k1) ===
+            KeyframeInterpolationType.HOLD ||
+          prop.keyInInterpolationType(k2) === KeyframeInterpolationType.HOLD
+        ) {
+          continue;
+        }
+
+        var t1 = prop.keyTime(k1);
+        var t2 = prop.keyTime(k2);
+        var dt = t2 - t1;
+        if (dt <= 0) continue;
+
+        var v1 = prop.keyValue(k1);
+        var v2 = prop.keyValue(k2);
+
+        var avgSpeed: number;
+        if (multiDim) {
+          var sum = 0;
+          var a = v1 as number[];
+          var b = v2 as number[];
+          for (var di = 0; di < a.length; di++) {
+            sum += (b[di] - a[di]) * (b[di] - a[di]);
+          }
+          avgSpeed = Math.sqrt(sum) / dt;
+        } else {
+          avgSpeed = Math.abs(((v2 as number) - (v1 as number)) / dt);
+        }
+
+        var outEase = prop.keyOutTemporalEase(k1);
+        var inEase = prop.keyInTemporalEase(k2);
+
+        var outInfl = outEase[0].influence / 100;
+        var outSpd = outEase[0].speed;
+        var inInfl = inEase[0].influence / 100;
+        var inSpd = inEase[0].speed;
+
+        var bx1 = outInfl;
+        var by1 = avgSpeed > 0 ? (outSpd / avgSpeed) * bx1 : 0;
+        var bx2 = 1 - inInfl;
+        var by2 = avgSpeed > 0 ? 1 - (inSpd / avgSpeed) * inInfl : 1;
+
+        results.push({
+          x1: bx1,
+          y1: by1,
+          x2: bx2,
+          y2: by2,
+          fps: comp.frameRate,
+          duration: dt,
+          name: prop.name,
+        });
+        break; // only first pair per property
+      }
+    }
+  }
+
+  return results;
 };

@@ -17,6 +17,23 @@
   let influenceIn = $state(50.0);
   let influenceOut = $state(50.0);
 
+  // Ghost curves: existing keyframe easing read from AE (one per property)
+  type GhostEasing = { x1: number; y1: number; x2: number; y2: number; fps: number; duration: number; name: string };
+  let ghostCurves: GhostEasing[] = $state([]);
+
+  const GHOST_COLORS = [
+    { stroke: "rgba(255, 255, 255, 0.2)", fill: "rgba(255, 255, 255, 0.03)" },
+    { stroke: "rgba(255, 170, 100, 0.2)", fill: "rgba(255, 170, 100, 0.03)" },
+    { stroke: "rgba(160, 220, 255, 0.2)", fill: "rgba(160, 220, 255, 0.03)" },
+    { stroke: "rgba(200, 160, 255, 0.2)", fill: "rgba(200, 160, 255, 0.03)" },
+  ];
+  let ghostOpacity = $state(0);
+  let ghostFadeRaf: number | null = null;
+
+  // Smooth Y-axis scaling to avoid jarring jumps
+  let smoothMaxSpeed = 1;
+  let scaleAnimRaf: number | null = null;
+
   let bezierString = $derived(
     viewMode === "graph"
       ? `cubic-bezier(${(influenceIn / 100).toFixed(2)}, 0.00, ${(1 - influenceOut / 100).toFixed(2)}, 1.00)`
@@ -99,6 +116,50 @@
       const tHi = Math.min(1, time + dt);
       const vLo = bezierValue(tLo, x1, x2);
       const vHi = bezierValue(tHi, x1, x2);
+      const speed = (tHi > tLo) ? (vHi - vLo) / (tHi - tLo) : 0;
+      points.push({ time, speed });
+    }
+    return points;
+  }
+
+  // Color based on frame density — blue when plenty of frames, red when sparse
+  function speedToColor(normalizedSpeed: number, totalFrames: number): string {
+    const frameDensity = totalFrames / Math.max(normalizedSpeed, 0.01);
+    // Ramp: >8 frames at this speed = blue, <3 = full red
+    const t = Math.max(0, Math.min(1, 1 - (frameDensity - 3) / 5));
+    const r = Math.round(74 + (255 - 74) * t);
+    const g = Math.round(158 - (158 - 74) * t);
+    const b = Math.round(255 - (255 - 74) * t);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  function speedToFillColor(normalizedSpeed: number, totalFrames: number): string {
+    const frameDensity = totalFrames / Math.max(normalizedSpeed, 0.01);
+    const t = Math.max(0, Math.min(1, 1 - (frameDensity - 3) / 5));
+    const r = Math.round(74 + (255 - 74) * t);
+    const g = Math.round(158 - (158 - 74) * t);
+    const b = Math.round(255 - (255 - 74) * t);
+    return `rgba(${r}, ${g}, ${b}, 0.08)`;
+  }
+
+  // General bezier value with explicit y1, y2 (for ghost curve with arbitrary control points)
+  function bezierValueFull(time: number, x1: number, y1: number, x2: number, y2: number): number {
+    if (time <= 0) return 0;
+    if (time >= 1) return 1;
+    const t = solveBezierT(time, x1, x2);
+    const mt = 1 - t;
+    return 3 * mt * mt * t * y1 + 3 * mt * t * t * y2 + t * t * t;
+  }
+
+  function computeSpeedGraphFull(x1: number, y1: number, x2: number, y2: number, samples: number): Array<{time: number, speed: number}> {
+    const dt = 0.002;
+    const points: Array<{time: number, speed: number}> = [];
+    for (let i = 0; i <= samples; i++) {
+      const time = i / samples;
+      const tLo = Math.max(0, time - dt);
+      const tHi = Math.min(1, time + dt);
+      const vLo = bezierValueFull(tLo, x1, y1, x2, y2);
+      const vHi = bezierValueFull(tHi, x1, y1, x2, y2);
       const speed = (tHi > tLo) ? (vHi - vLo) / (tHi - tLo) : 0;
       points.push({ time, speed });
     }
@@ -204,42 +265,110 @@
     const x2 = 1 - influenceOut / 100;
     const points = computeSpeedGraph(x1, x2, 400);
 
-    // Find max speed for normalization (auto-scale Y axis like AE)
-    let maxSpeed = 0;
-    for (const pt of points) {
-      if (pt.speed > maxSpeed) maxSpeed = pt.speed;
-    }
-    if (maxSpeed < 0.01) maxSpeed = 1; // avoid division by zero for edge cases
+    // Compute ghost points for each property
+    const allGhostPoints = ghostCurves.map(g =>
+      computeSpeedGraphFull(g.x1, g.y1, g.x2, g.y2, 400)
+    );
 
-    // Build canvas-space points
-    const canvasPoints: Array<[number, number]> = points.map(pt => {
-      const ny = (pt.speed / maxSpeed) * 0.9; // scale to 90% of canvas height
-      return toCanvas(pt.time, ny);
-    });
+    // Find target max speed across all curves for shared Y-axis scaling
+    let targetMaxSpeed = 0;
+    for (const pt of points) {
+      if (pt.speed > targetMaxSpeed) targetMaxSpeed = pt.speed;
+    }
+    for (const gp of allGhostPoints) {
+      for (const pt of gp) {
+        if (pt.speed > targetMaxSpeed) targetMaxSpeed = pt.speed;
+      }
+    }
+    if (targetMaxSpeed < 0.01) targetMaxSpeed = 1;
+
+    // Smoothly interpolate toward target scale
+    const scaleDiff = Math.abs(smoothMaxSpeed - targetMaxSpeed);
+    if (scaleDiff > 0.001) {
+      smoothMaxSpeed += (targetMaxSpeed - smoothMaxSpeed) * 0.15;
+      // Keep animating until settled
+      if (scaleAnimRaf) cancelAnimationFrame(scaleAnimRaf);
+      scaleAnimRaf = requestAnimationFrame(() => {
+        scaleAnimRaf = null;
+        draw();
+      });
+    } else {
+      smoothMaxSpeed = targetMaxSpeed;
+    }
+    const maxSpeed = smoothMaxSpeed;
 
     const [startX, startY] = toCanvas(0, 0);
     const [endX, endY] = toCanvas(1, 0);
 
-    // Fill under curve
-    ctx.fillStyle = "rgba(74, 158, 255, 0.08)";
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    for (const [cx, cy] of canvasPoints) {
-      ctx.lineTo(cx, cy);
-    }
-    ctx.lineTo(endX, endY);
-    ctx.closePath();
-    ctx.fill();
+    // --- Ghost curves (existing easing, drawn behind) ---
+    if (allGhostPoints.length > 0 && ghostOpacity > 0) {
+      const go = ghostOpacity;
+      for (let gi = 0; gi < allGhostPoints.length; gi++) {
+        const ghostPts = allGhostPoints[gi];
+        const color = GHOST_COLORS[gi % GHOST_COLORS.length];
+        const ghostCanvasPoints: Array<[number, number]> = ghostPts.map(pt => {
+          const ny = (pt.speed / maxSpeed) * 0.9;
+          return toCanvas(pt.time, ny);
+        });
 
-    // Curve stroke
-    ctx.strokeStyle = "#4a9eff";
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(canvasPoints[0][0], canvasPoints[0][1]);
-    for (let i = 1; i < canvasPoints.length; i++) {
-      ctx.lineTo(canvasPoints[i][0], canvasPoints[i][1]);
+        // Parse base colors and apply ghost opacity
+        const fillMatch = color.fill.match(/[\d.]+/g)!;
+        const strokeMatch = color.stroke.match(/[\d.]+/g)!;
+
+        // Ghost fill
+        ctx.fillStyle = `rgba(${fillMatch[0]}, ${fillMatch[1]}, ${fillMatch[2]}, ${parseFloat(fillMatch[3]) * go})`;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        for (const [cx, cy] of ghostCanvasPoints) {
+          ctx.lineTo(cx, cy);
+        }
+        ctx.lineTo(endX, endY);
+        ctx.closePath();
+        ctx.fill();
+
+        // Ghost stroke
+        ctx.strokeStyle = `rgba(${strokeMatch[0]}, ${strokeMatch[1]}, ${strokeMatch[2]}, ${parseFloat(strokeMatch[3]) * go})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(ghostCanvasPoints[0][0], ghostCanvasPoints[0][1]);
+        for (let i = 1; i < ghostCanvasPoints.length; i++) {
+          ctx.lineTo(ghostCanvasPoints[i][0], ghostCanvasPoints[i][1]);
+        }
+        ctx.stroke();
+      }
     }
-    ctx.stroke();
+
+    // --- User's curve (on top) ---
+    const canvasPoints: Array<[number, number]> = points.map(pt => {
+      const ny = (pt.speed / maxSpeed) * 0.9;
+      return toCanvas(pt.time, ny);
+    });
+
+    const totalFrames = ghostCurves.length > 0 ? ghostCurves[0].fps * ghostCurves[0].duration : Infinity;
+
+    // Fill under curve with per-column color strips for frame-density gradient
+    for (let i = 1; i < canvasPoints.length; i++) {
+      const avgSpd = (points[i - 1].speed + points[i].speed) / 2;
+      ctx.fillStyle = speedToFillColor(avgSpd, totalFrames);
+      ctx.beginPath();
+      ctx.moveTo(canvasPoints[i - 1][0], startY);
+      ctx.lineTo(canvasPoints[i - 1][0], canvasPoints[i - 1][1]);
+      ctx.lineTo(canvasPoints[i][0], canvasPoints[i][1]);
+      ctx.lineTo(canvasPoints[i][0], startY);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Per-segment colored stroke
+    ctx.lineWidth = 2.5;
+    for (let i = 1; i < canvasPoints.length; i++) {
+      const avgSpd = (points[i - 1].speed + points[i].speed) / 2;
+      ctx.strokeStyle = speedToColor(avgSpd, totalFrames);
+      ctx.beginPath();
+      ctx.moveTo(canvasPoints[i - 1][0], canvasPoints[i - 1][1]);
+      ctx.lineTo(canvasPoints[i][0], canvasPoints[i][1]);
+      ctx.stroke();
+    }
 
     // Endpoint dots at baseline
     for (const [dotX, dotY] of [[startX, startY], [endX, endY]]) {
@@ -247,6 +376,46 @@
       ctx.beginPath();
       ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // Alignment indicators — vertical line at each ghost's peak when active curve matches
+    if (allGhostPoints.length > 0 && ghostOpacity > 0) {
+      const activePeak = Math.max(...points.map(p => p.speed), 0.01);
+
+      for (let gi = 0; gi < allGhostPoints.length; gi++) {
+        const ghostPts = allGhostPoints[gi];
+
+        let ghostPeakIdx = 0;
+        let ghostPeakSpeed = 0;
+        for (let i = 0; i < ghostPts.length; i++) {
+          if (ghostPts[i].speed > ghostPeakSpeed) {
+            ghostPeakSpeed = ghostPts[i].speed;
+            ghostPeakIdx = i;
+          }
+        }
+
+        const ghostNorm = ghostPeakSpeed / Math.max(ghostPeakSpeed, 0.01);
+        const activeNorm = points[ghostPeakIdx].speed / activePeak;
+        const diff = Math.abs(activeNorm - ghostNorm);
+        const lineOpacity = Math.max(0, 1 - diff / 0.001) * ghostOpacity;
+
+        if (lineOpacity > 0.01) {
+          const color = GHOST_COLORS[gi % GHOST_COLORS.length];
+          const strokeMatch = color.stroke.match(/[\d.]+/g)!;
+          const peakTime = ghostPts[ghostPeakIdx].time;
+          const [lineX] = toCanvas(peakTime, 0);
+          const topY = PAD;
+          const bottomY = PAD + DRAW;
+          ctx.strokeStyle = `rgba(${strokeMatch[0]}, ${strokeMatch[1]}, ${strokeMatch[2]}, ${0.25 * lineOpacity})`;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.moveTo(lineX, topY);
+          ctx.lineTo(lineX, bottomY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
     }
   }
 
@@ -339,7 +508,7 @@
       e.preventDefault();
       const norm = fromCanvas(pos.x, pos.y);
       // Vertical: down on screen = more easing (both increase)
-      const deltaY = (graphDragStart.normY - norm.y) * 100;
+      const deltaY = (norm.y - graphDragStart.normY) * 100;
       // Horizontal: drag right = peak moves right (+In, -Out)
       const deltaX = (norm.x - graphDragStart.normX) * 60;
       influenceIn = Math.max(0, Math.min(100, graphDragStart.infl + deltaY + deltaX));
@@ -396,9 +565,13 @@
       x2 = p2.x;
       y2 = p2.y;
     }
-    evalTS("applyBezierEasing", x1, y1, x2, y2).catch((e: any) => {
-      console.error("applyBezierEasing error:", e);
-    });
+    evalTS("applyBezierEasing", x1, y1, x2, y2)
+      .then(() => {
+        loadExistingEasing();
+      })
+      .catch((e: any) => {
+        console.error("applyBezierEasing error:", e);
+      });
   }
 
   // --- Reactive redraw ---
@@ -414,8 +587,59 @@
     dragging;
     graphDragging;
     viewMode;
+    ghostCurves;
+    ghostOpacity;
     draw();
   });
+
+  function ghostsChanged(a: GhostEasing[], b: GhostEasing[]): boolean {
+    if (a.length !== b.length) return true;
+    for (let i = 0; i < a.length; i++) {
+      if (Math.abs(a[i].x1 - b[i].x1) > 0.001 || Math.abs(a[i].y1 - b[i].y1) > 0.001 ||
+          Math.abs(a[i].x2 - b[i].x2) > 0.001 || Math.abs(a[i].y2 - b[i].y2) > 0.001) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function fadeInGhost() {
+    if (ghostFadeRaf) cancelAnimationFrame(ghostFadeRaf);
+    ghostOpacity = 0;
+    const start = performance.now();
+    const duration = 300;
+    function tick() {
+      const t = Math.min((performance.now() - start) / duration, 1);
+      ghostOpacity = t;
+      if (t < 1) {
+        ghostFadeRaf = requestAnimationFrame(tick);
+      } else {
+        ghostFadeRaf = null;
+      }
+    }
+    ghostFadeRaf = requestAnimationFrame(tick);
+  }
+
+  function loadExistingEasing() {
+    evalTS("getSelectedKeyframeEasing")
+      .then((result: any) => {
+        const newGhosts: GhostEasing[] = result && result.length ? result : [];
+        if (ghostsChanged(ghostCurves, newGhosts)) {
+          ghostCurves = newGhosts;
+          if (newGhosts.length > 0) {
+            fadeInGhost();
+          } else {
+            ghostOpacity = 0;
+          }
+        }
+      })
+      .catch(() => {
+        if (ghostCurves.length > 0) {
+          ghostCurves = [];
+          ghostOpacity = 0;
+        }
+      });
+  }
 
   onMount(() => {
     // Bind mouse events directly to DOM for CEP compatibility
@@ -424,11 +648,16 @@
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
     draw();
+    loadExistingEasing();
+
+    // Poll for keyframe selection changes (~1s interval)
+    const pollInterval = setInterval(loadExistingEasing, 1000);
 
     return () => {
       canvasEl.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      clearInterval(pollInterval);
     };
   });
 </script>
@@ -662,4 +891,5 @@
   .apply-btn:active {
     background: #e09520 !important;
   }
+
 </style>
