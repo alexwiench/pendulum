@@ -64,6 +64,38 @@ function collectKeyframedProperties(
 }
 
 /**
+ * Collects keyframed properties from a layer, preferring those with selected keyframes.
+ */
+function getTargetProperties(layer: Layer): Property[] {
+  var allProps: Property[] = [];
+  collectKeyframedProperties(layer as PropertyGroup, allProps);
+  var selectedProps: Property[] = [];
+  for (var sp = 0; sp < allProps.length; sp++) {
+    if (allProps[sp].selectedKeys && allProps[sp].selectedKeys.length > 0) {
+      selectedProps.push(allProps[sp]);
+    }
+  }
+  return selectedProps.length > 0 ? selectedProps : allProps;
+}
+
+/**
+ * Collects key indices for a property, preferring selected keys.
+ */
+function getTargetKeys(prop: Property): number[] {
+  var keys: number[] = [];
+  if (prop.selectedKeys && prop.selectedKeys.length > 0) {
+    for (var s = 0; s < prop.selectedKeys.length; s++) {
+      keys.push(prop.selectedKeys[s]);
+    }
+  } else {
+    for (var ki = 1; ki <= prop.numKeys; ki++) {
+      keys.push(ki);
+    }
+  }
+  return keys;
+}
+
+/**
  * Applies a cubic-bezier easing curve to all keyframes on selected
  * properties of selected layers in the active composition.
  *
@@ -95,37 +127,14 @@ export const applyBezierEasing = (
   for (var i = 0; i < layers.length; i++) {
     var layer = layers[i];
 
-    // Collect all keyframed properties on this layer
-    var allProps: Property[] = [];
-    collectKeyframedProperties(layer as PropertyGroup, allProps);
-
-    // First pass: only properties with selected keyframes
-    var selectedProps: Property[] = [];
-    for (var sp = 0; sp < allProps.length; sp++) {
-      if (allProps[sp].selectedKeys && allProps[sp].selectedKeys.length > 0) {
-        selectedProps.push(allProps[sp]);
-      }
-    }
-
-    // Use selected properties if any, otherwise fall back to all
-    var props = selectedProps.length > 0 ? selectedProps : allProps;
+    var props = getTargetProperties(layer);
 
     for (var p = 0; p < props.length; p++) {
       var prop = props[p];
       var easeDims = getEaseDimensions(prop);
       var multiDim = isMultiDimValue(prop);
 
-      // Use selectedKeys if available, otherwise all keyframes
-      var keys: number[] = [];
-      if (prop.selectedKeys && prop.selectedKeys.length > 0) {
-        for (var s = 0; s < prop.selectedKeys.length; s++) {
-          keys.push(prop.selectedKeys[s]);
-        }
-      } else {
-        for (var ki = 1; ki <= prop.numKeys; ki++) {
-          keys.push(ki);
-        }
-      }
+      var keys = getTargetKeys(prop);
 
       for (var k = 0; k < keys.length; k++) {
         var keyIndex = keys[k];
@@ -242,10 +251,10 @@ export const applyBezierEasing = (
  */
 export const getSelectedKeyframeEasing = () => {
   var comp = getActiveComp();
-  if (!comp) return [];
+  if (!comp) return { curves: [], playhead: null };
 
   var layers = comp.selectedLayers;
-  if (!layers || layers.length === 0) return [];
+  if (!layers || layers.length === 0) return { curves: [], playhead: null };
 
   var results: Array<{
     x1: number;
@@ -256,35 +265,19 @@ export const getSelectedKeyframeEasing = () => {
     duration: number;
     name: string;
   }> = [];
+  var playhead: number | null = null;
+  var spanStart: number | null = null;
+  var spanEnd: number | null = null;
 
   for (var i = 0; i < layers.length; i++) {
     var layer = layers[i];
-    var allProps: Property[] = [];
-    collectKeyframedProperties(layer as PropertyGroup, allProps);
-
-    // Prefer properties with selected keyframes
-    var selectedProps: Property[] = [];
-    for (var sp = 0; sp < allProps.length; sp++) {
-      if (allProps[sp].selectedKeys && allProps[sp].selectedKeys.length > 0) {
-        selectedProps.push(allProps[sp]);
-      }
-    }
-    var props = selectedProps.length > 0 ? selectedProps : allProps;
+    var props = getTargetProperties(layer);
 
     for (var p = 0; p < props.length; p++) {
       var prop = props[p];
       var multiDim = isMultiDimValue(prop);
 
-      var keys: number[] = [];
-      if (prop.selectedKeys && prop.selectedKeys.length > 0) {
-        for (var s = 0; s < prop.selectedKeys.length; s++) {
-          keys.push(prop.selectedKeys[s]);
-        }
-      } else {
-        for (var ki = 1; ki <= prop.numKeys; ki++) {
-          keys.push(ki);
-        }
-      }
+      var keys = getTargetKeys(prop);
 
       // Find first pair of adjacent keyframes for this property
       for (var k = 0; k < keys.length - 1; k++) {
@@ -333,6 +326,16 @@ export const getSelectedKeyframeEasing = () => {
         var bx2 = 1 - inInfl;
         var by2 = avgSpeed > 0 ? 1 - (inSpd / avgSpeed) * inInfl : 1;
 
+        // Compute playhead position for exactly 2 selected keys
+        if (playhead === null && keys.length === 2) {
+          spanStart = t1;
+          spanEnd = t2;
+          var normalized = (comp.time - t1) / dt;
+          if (normalized >= 0 && normalized <= 1) {
+            playhead = normalized;
+          }
+        }
+
         results.push({
           x1: bx1,
           y1: by1,
@@ -347,5 +350,15 @@ export const getSelectedKeyframeEasing = () => {
     }
   }
 
-  return results;
+  return { curves: results, playhead: playhead, spanStart: spanStart, spanEnd: spanEnd };
+};
+
+/**
+ * Lightweight function that only returns the comp's current time.
+ * Used for high-frequency playhead polling.
+ */
+export const getCompTime = () => {
+  var comp = getActiveComp();
+  if (!comp) return null;
+  return comp.time;
 };

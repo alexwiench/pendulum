@@ -22,13 +22,19 @@
   let ghostCurves: GhostEasing[] = $state([]);
 
   const GHOST_COLORS = [
-    { stroke: "rgba(255, 255, 255, 0.2)", fill: "rgba(255, 255, 255, 0.03)" },
-    { stroke: "rgba(255, 170, 100, 0.2)", fill: "rgba(255, 170, 100, 0.03)" },
-    { stroke: "rgba(160, 220, 255, 0.2)", fill: "rgba(160, 220, 255, 0.03)" },
-    { stroke: "rgba(200, 160, 255, 0.2)", fill: "rgba(200, 160, 255, 0.03)" },
+    { r: 255, g: 255, b: 255, strokeA: 0.2, fillA: 0.03 },
+    { r: 255, g: 170, b: 100, strokeA: 0.2, fillA: 0.03 },
+    { r: 160, g: 220, b: 255, strokeA: 0.2, fillA: 0.03 },
+    { r: 200, g: 160, b: 255, strokeA: 0.2, fillA: 0.03 },
   ];
   let ghostOpacity = $state(0);
   let ghostFadeRaf: number | null = null;
+  let playheadPos: number | null = $state(null); // rendered position (animated)
+  let playheadTarget: number | null = null; // where we're heading (-0.05/1.05 for exit animation)
+  let playheadRaf: number | null = null;
+  let keySpan: { t1: number; t2: number } | null = null;
+  let playheadInterval: ReturnType<typeof setInterval> | null = null;
+  let playheadPollPending = false;
 
   // Smooth Y-axis scaling to avoid jarring jumps
   let smoothMaxSpeed = 1;
@@ -98,52 +104,8 @@
     return t;
   }
 
-  // Get value at a given time (0-1) from cubic-bezier(x1, 0, x2, 1)
-  function bezierValue(time: number, x1: number, x2: number): number {
-    if (time <= 0) return 0;
-    if (time >= 1) return 1;
-    const t = solveBezierT(time, x1, x2);
-    const mt = 1 - t;
-    return 3 * mt * t * t + t * t * t;
-  }
-
-  function computeSpeedGraph(x1: number, x2: number, samples: number): Array<{time: number, speed: number}> {
-    const dt = 0.002;
-    const points: Array<{time: number, speed: number}> = [];
-    for (let i = 0; i <= samples; i++) {
-      const time = i / samples;
-      const tLo = Math.max(0, time - dt);
-      const tHi = Math.min(1, time + dt);
-      const vLo = bezierValue(tLo, x1, x2);
-      const vHi = bezierValue(tHi, x1, x2);
-      const speed = (tHi > tLo) ? (vHi - vLo) / (tHi - tLo) : 0;
-      points.push({ time, speed });
-    }
-    return points;
-  }
-
-  // Color based on frame density — blue when plenty of frames, red when sparse
-  function speedToColor(normalizedSpeed: number, totalFrames: number): string {
-    const frameDensity = totalFrames / Math.max(normalizedSpeed, 0.01);
-    // Ramp: >8 frames at this speed = blue, <3 = full red
-    const t = Math.max(0, Math.min(1, 1 - (frameDensity - 3) / 5));
-    const r = Math.round(74 + (255 - 74) * t);
-    const g = Math.round(158 - (158 - 74) * t);
-    const b = Math.round(255 - (255 - 74) * t);
-    return `rgb(${r}, ${g}, ${b})`;
-  }
-
-  function speedToFillColor(normalizedSpeed: number, totalFrames: number): string {
-    const frameDensity = totalFrames / Math.max(normalizedSpeed, 0.01);
-    const t = Math.max(0, Math.min(1, 1 - (frameDensity - 3) / 5));
-    const r = Math.round(74 + (255 - 74) * t);
-    const g = Math.round(158 - (158 - 74) * t);
-    const b = Math.round(255 - (255 - 74) * t);
-    return `rgba(${r}, ${g}, ${b}, 0.08)`;
-  }
-
-  // General bezier value with explicit y1, y2 (for ghost curve with arbitrary control points)
-  function bezierValueFull(time: number, x1: number, y1: number, x2: number, y2: number): number {
+  // Get value at a given time (0-1) from cubic-bezier(x1, y1, x2, y2)
+  function bezierValue(time: number, x1: number, y1: number, x2: number, y2: number): number {
     if (time <= 0) return 0;
     if (time >= 1) return 1;
     const t = solveBezierT(time, x1, x2);
@@ -151,19 +113,29 @@
     return 3 * mt * mt * t * y1 + 3 * mt * t * t * y2 + t * t * t;
   }
 
-  function computeSpeedGraphFull(x1: number, y1: number, x2: number, y2: number, samples: number): Array<{time: number, speed: number}> {
+  function computeSpeedGraph(x1: number, y1: number, x2: number, y2: number, samples: number): Array<{time: number, speed: number}> {
     const dt = 0.002;
     const points: Array<{time: number, speed: number}> = [];
     for (let i = 0; i <= samples; i++) {
       const time = i / samples;
       const tLo = Math.max(0, time - dt);
       const tHi = Math.min(1, time + dt);
-      const vLo = bezierValueFull(tLo, x1, y1, x2, y2);
-      const vHi = bezierValueFull(tHi, x1, y1, x2, y2);
+      const vLo = bezierValue(tLo, x1, y1, x2, y2);
+      const vHi = bezierValue(tHi, x1, y1, x2, y2);
       const speed = (tHi > tLo) ? (vHi - vLo) / (tHi - tLo) : 0;
       points.push({ time, speed });
     }
     return points;
+  }
+
+  // Color based on frame density — blue when plenty of frames, red when sparse
+  function speedToColor(normalizedSpeed: number, totalFrames: number, alpha = 1): string {
+    const frameDensity = totalFrames / Math.max(normalizedSpeed, 0.01);
+    const t = Math.max(0, Math.min(1, 1 - (frameDensity - 3) / 5));
+    const r = Math.round(74 + (255 - 74) * t);
+    const g = Math.round(158 - (158 - 74) * t);
+    const b = Math.round(255 - (255 - 74) * t);
+    return alpha < 1 ? `rgba(${r}, ${g}, ${b}, ${alpha})` : `rgb(${r}, ${g}, ${b})`;
   }
 
   // --- Canvas rendering ---
@@ -263,11 +235,11 @@
   function drawGraphMode(ctx: CanvasRenderingContext2D) {
     const x1 = influenceIn / 100;
     const x2 = 1 - influenceOut / 100;
-    const points = computeSpeedGraph(x1, x2, 400);
+    const points = computeSpeedGraph(x1, 0, x2, 1, 400);
 
     // Compute ghost points for each property
     const allGhostPoints = ghostCurves.map(g =>
-      computeSpeedGraphFull(g.x1, g.y1, g.x2, g.y2, 400)
+      computeSpeedGraph(g.x1, g.y1, g.x2, g.y2, 400)
     );
 
     // Find target max speed across all curves for shared Y-axis scaling
@@ -311,12 +283,8 @@
           return toCanvas(pt.time, ny);
         });
 
-        // Parse base colors and apply ghost opacity
-        const fillMatch = color.fill.match(/[\d.]+/g)!;
-        const strokeMatch = color.stroke.match(/[\d.]+/g)!;
-
         // Ghost fill
-        ctx.fillStyle = `rgba(${fillMatch[0]}, ${fillMatch[1]}, ${fillMatch[2]}, ${parseFloat(fillMatch[3]) * go})`;
+        ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.fillA * go})`;
         ctx.beginPath();
         ctx.moveTo(startX, startY);
         for (const [cx, cy] of ghostCanvasPoints) {
@@ -327,7 +295,7 @@
         ctx.fill();
 
         // Ghost stroke
-        ctx.strokeStyle = `rgba(${strokeMatch[0]}, ${strokeMatch[1]}, ${strokeMatch[2]}, ${parseFloat(strokeMatch[3]) * go})`;
+        ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.strokeA * go})`;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(ghostCanvasPoints[0][0], ghostCanvasPoints[0][1]);
@@ -346,18 +314,16 @@
 
     const totalFrames = ghostCurves.length > 0 ? ghostCurves[0].fps * ghostCurves[0].duration : Infinity;
 
-    // Fill under curve with per-column color strips for frame-density gradient
-    for (let i = 1; i < canvasPoints.length; i++) {
-      const avgSpd = (points[i - 1].speed + points[i].speed) / 2;
-      ctx.fillStyle = speedToFillColor(avgSpd, totalFrames);
-      ctx.beginPath();
-      ctx.moveTo(canvasPoints[i - 1][0], startY);
-      ctx.lineTo(canvasPoints[i - 1][0], canvasPoints[i - 1][1]);
-      ctx.lineTo(canvasPoints[i][0], canvasPoints[i][1]);
-      ctx.lineTo(canvasPoints[i][0], startY);
-      ctx.closePath();
-      ctx.fill();
+    // Fill under curve
+    ctx.fillStyle = "rgba(74, 158, 255, 0.08)";
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    for (const [cx, cy] of canvasPoints) {
+      ctx.lineTo(cx, cy);
     }
+    ctx.lineTo(endX, endY);
+    ctx.closePath();
+    ctx.fill();
 
     // Per-segment colored stroke
     ctx.lineWidth = 2.5;
@@ -378,35 +344,70 @@
       ctx.fill();
     }
 
-    // Alignment indicators — vertical line at each ghost's peak when active curve matches
+    // Playhead indicator (styled like the AE CTI)
+    if (playheadPos !== null) {
+      const clampedPh = Math.max(0, Math.min(1, playheadPos));
+      // Fade opacity near edges (entering/exiting)
+      const edgeDist = Math.min(clampedPh, 1 - clampedPh);
+      const phOpacity = Math.min(1, edgeDist / 0.03);
+      const [phX] = toCanvas(clampedPh, 0);
+      const phColor = `rgba(74, 158, 255, ${phOpacity})`;
+
+      // Vertical line
+      ctx.strokeStyle = phColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(phX, PAD);
+      ctx.lineTo(phX, PAD + DRAW);
+      ctx.stroke();
+
+      // Chip at the top
+      const chipW = 8;
+      const chipH = 10;
+      const chipY = PAD - chipH;
+      ctx.fillStyle = phColor;
+      ctx.beginPath();
+      ctx.moveTo(phX - chipW / 2, chipY);
+      ctx.lineTo(phX + chipW / 2, chipY);
+      ctx.lineTo(phX + chipW / 2, chipY + chipH * 0.6);
+      ctx.lineTo(phX, chipY + chipH);
+      ctx.lineTo(phX - chipW / 2, chipY + chipH * 0.6);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Show a dashed vertical line when the active curve's peak timing aligns with a ghost's peak
     if (allGhostPoints.length > 0 && ghostOpacity > 0) {
-      const activePeak = Math.max(...points.map(p => p.speed), 0.01);
+      let activePeakTime = 0;
+      let activePeakSpeed = 0;
+      for (let i = 0; i < points.length; i++) {
+        if (points[i].speed > activePeakSpeed) {
+          activePeakSpeed = points[i].speed;
+          activePeakTime = points[i].time;
+        }
+      }
 
       for (let gi = 0; gi < allGhostPoints.length; gi++) {
         const ghostPts = allGhostPoints[gi];
 
-        let ghostPeakIdx = 0;
+        let ghostPeakTime = 0;
         let ghostPeakSpeed = 0;
         for (let i = 0; i < ghostPts.length; i++) {
           if (ghostPts[i].speed > ghostPeakSpeed) {
             ghostPeakSpeed = ghostPts[i].speed;
-            ghostPeakIdx = i;
+            ghostPeakTime = ghostPts[i].time;
           }
         }
 
-        const ghostNorm = ghostPeakSpeed / Math.max(ghostPeakSpeed, 0.01);
-        const activeNorm = points[ghostPeakIdx].speed / activePeak;
-        const diff = Math.abs(activeNorm - ghostNorm);
-        const lineOpacity = Math.max(0, 1 - diff / 0.001) * ghostOpacity;
+        const diff = Math.abs(activePeakTime - ghostPeakTime);
+        const lineOpacity = Math.max(0, 1 - diff / 0.01) * ghostOpacity;
 
         if (lineOpacity > 0.01) {
           const color = GHOST_COLORS[gi % GHOST_COLORS.length];
-          const strokeMatch = color.stroke.match(/[\d.]+/g)!;
-          const peakTime = ghostPts[ghostPeakIdx].time;
-          const [lineX] = toCanvas(peakTime, 0);
+          const [lineX] = toCanvas(ghostPeakTime, 0);
           const topY = PAD;
           const bottomY = PAD + DRAW;
-          ctx.strokeStyle = `rgba(${strokeMatch[0]}, ${strokeMatch[1]}, ${strokeMatch[2]}, ${0.25 * lineOpacity})`;
+          ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${0.25 * lineOpacity})`;
           ctx.lineWidth = 1;
           ctx.setLineDash([4, 3]);
           ctx.beginPath();
@@ -589,6 +590,7 @@
     viewMode;
     ghostCurves;
     ghostOpacity;
+    playheadPos;
     draw();
   });
 
@@ -620,10 +622,94 @@
     ghostFadeRaf = requestAnimationFrame(tick);
   }
 
+  function animatePlayhead() {
+    if (playheadRaf) return; // already running, just update target
+    function tick() {
+      playheadRaf = null;
+      if (playheadTarget === null || playheadPos === null) {
+        playheadPos = null;
+        return;
+      }
+      const diff = playheadTarget - playheadPos;
+      if (Math.abs(diff) < 0.001) {
+        if (playheadTarget < 0 || playheadTarget > 1) {
+          playheadPos = null;
+          playheadTarget = null;
+        } else {
+          playheadPos = playheadTarget;
+        }
+      } else {
+        playheadPos += diff * 0.25;
+        playheadRaf = requestAnimationFrame(tick);
+      }
+    }
+    playheadRaf = requestAnimationFrame(tick);
+  }
+
+  function pollPlayhead() {
+    if (!keySpan || playheadPollPending) return;
+    playheadPollPending = true;
+    evalTS("getCompTime")
+      .then((time: any) => {
+        playheadPollPending = false;
+        if (time == null || !keySpan) {
+          playheadTarget = null;
+          playheadPos = null;
+          return;
+        }
+        const span = keySpan.t2 - keySpan.t1;
+        const normalized = (time - keySpan.t1) / span;
+
+        if (normalized < 0 || normalized > 1) {
+          if (playheadPos !== null) {
+            playheadTarget = normalized < 0 ? -0.03 : 1.03;
+            animatePlayhead();
+          }
+          return;
+        }
+
+        if (playheadPos === null) {
+          playheadPos = normalized < 0.5 ? -0.03 : 1.03;
+        }
+        playheadTarget = normalized;
+        animatePlayhead();
+      })
+      .catch(() => {
+        playheadPollPending = false;
+        playheadTarget = null;
+        playheadPos = null;
+      });
+  }
+
+  function startPlayheadPoll() {
+    if (playheadInterval) return;
+    playheadInterval = setInterval(pollPlayhead, 100);
+  }
+
+  function stopPlayheadPoll() {
+    if (playheadInterval) {
+      clearInterval(playheadInterval);
+      playheadInterval = null;
+    }
+    if (playheadRaf) {
+      cancelAnimationFrame(playheadRaf);
+      playheadRaf = null;
+    }
+    playheadTarget = null;
+    playheadPos = null;
+  }
+
   function loadExistingEasing() {
     evalTS("getSelectedKeyframeEasing")
       .then((result: any) => {
-        const newGhosts: GhostEasing[] = result && result.length ? result : [];
+        const newGhosts: GhostEasing[] = result && result.curves ? result.curves : [];
+        if (result && result.spanStart != null && result.spanEnd != null) {
+          keySpan = { t1: result.spanStart, t2: result.spanEnd };
+          startPlayheadPoll();
+        } else {
+          keySpan = null;
+          stopPlayheadPoll();
+        }
         if (ghostsChanged(ghostCurves, newGhosts)) {
           ghostCurves = newGhosts;
           if (newGhosts.length > 0) {
@@ -638,6 +724,8 @@
           ghostCurves = [];
           ghostOpacity = 0;
         }
+        keySpan = null;
+        stopPlayheadPoll();
       });
   }
 
@@ -658,6 +746,7 @@
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
       clearInterval(pollInterval);
+      stopPlayheadPoll();
     };
   });
 </script>
