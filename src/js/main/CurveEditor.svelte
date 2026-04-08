@@ -21,10 +21,16 @@
   const ICON_PAD = 2;
   const modeIconRect = { x: ICON_PAD, y: ICON_PAD };
   let gearIconX = $derived(SIZE - ICON_SIZE - ICON_PAD);
+  const GRID_GAP = 3;
+  const GRID_COLS = 2;
+  const GRID_ROWS = 4;
+  const ROW_GAP = 6;
+  let gridCellSize = $derived(Math.floor((containerWidth - (GRID_COLS + GRID_ROWS - 2) * GRID_GAP - ROW_GAP) / (GRID_COLS + GRID_ROWS)));
+  let canvasWidth = $derived(gridCellSize * GRID_ROWS + GRID_GAP * (GRID_ROWS - 1));
   let viewMode: "curve" | "graph" = $state(settings.defaultViewMode);
 
   let canvasEl: HTMLCanvasElement;
-  let canvasWidth = $state(0);
+  let containerWidth = $state(0);
 
   // Independent influence state for graph mode (0–100, default 50 = smooth ease)
   let influenceIn = $state(50.0);
@@ -64,7 +70,7 @@
   );
 
   // --- Canvas dimensions (fill container width) ---
-  let SIZE = $derived(canvasWidth > 0 ? canvasWidth : 250);
+  let SIZE = $derived(containerWidth > 0 ? canvasWidth : 250);
   const PAD = 20;
   let DRAW = $derived(SIZE - PAD * 2);
   const HIT_RADIUS = 12;
@@ -959,21 +965,27 @@
   });
 </script>
 
-<div class="curve-editor">
-  <canvas
-    bind:this={canvasEl}
-    bind:clientWidth={canvasWidth}
-    class="curve-canvas"
-    style="cursor: {toolbarHover
-      ? 'pointer'
-      : viewMode === 'graph'
-        ? (graphHandleDragging ? 'ew-resize' : graphHovering ? 'ew-resize' : graphDragging ? 'grabbing' : 'grab')
-        : dragging
-          ? 'grabbing'
-          : hovering
-            ? 'grab'
-            : 'crosshair'};"
-  ></canvas>
+<div class="curve-editor" bind:clientWidth={containerWidth}>
+  <div class="graph-row">
+    <canvas
+      bind:this={canvasEl}
+      class="curve-canvas"
+      style="width: {canvasWidth}px; height: {canvasWidth}px; cursor: {toolbarHover
+        ? 'pointer'
+        : viewMode === 'graph'
+          ? (graphHandleDragging ? 'ew-resize' : graphHovering ? 'ew-resize' : graphDragging ? 'grabbing' : 'grab')
+          : dragging
+            ? 'grabbing'
+            : hovering
+              ? 'grab'
+              : 'crosshair'};"
+    ></canvas>
+    <div class="side-grid" style="grid-template-columns: repeat(2, {gridCellSize}px); grid-template-rows: repeat(4, {gridCellSize}px);">
+      {#each Array(GRID_COLS * GRID_ROWS) as _, i}
+        <div class="side-grid-cell"></div>
+      {/each}
+    </div>
+  </div>
 
   <div class="presets">
     {#if viewMode === 'graph'}
@@ -1016,14 +1028,28 @@
     flex-direction: column;
     gap: 8px;
     width: 100%;
-    max-width: 400px;
+  }
+
+  .graph-row {
+    display: flex;
+    gap: 6px;
   }
 
   .curve-canvas {
     border-radius: 4px;
     display: block;
-    width: 100%;
-    aspect-ratio: 1;
+    flex-shrink: 0;
+  }
+
+  .side-grid {
+    display: grid;
+    gap: 3px;
+    flex-shrink: 0;
+  }
+
+  .side-grid-cell {
+    background: #252525;
+    border-radius: 3px;
   }
 
   .presets {
