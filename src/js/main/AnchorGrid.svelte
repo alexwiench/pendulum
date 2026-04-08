@@ -68,8 +68,8 @@
   .anchor-dot::after {
     content: "";
     display: block;
-    width: 8px;
-    height: 8px;
+    width: 5px;
+    height: 5px;
     border-radius: 50%;
     background: #888;
     transition: background 0.15s, transform 0.15s;

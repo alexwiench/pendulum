@@ -60,7 +60,7 @@
   <div class="settings-panel">
   <div class="header">
     <span class="title">Settings</span>
-    <button class="close-btn" onclick={onclose}>&#x2715;</button>
+    <button class="close-btn" onclick={onclose}>&times;</button>
   </div>
 
   <div class="content">
@@ -77,16 +77,10 @@
       </label>
     </div>
 
-    <!-- Colors -->
+    <!-- Appearance -->
     <div class="section">
-      <div class="section-title">Colors</div>
-      <div class="row">
-        <span class="label-text">Playhead</span>
-        <div class="color-pick-group">
-          <button class="color-swatch clickable" style="background-color: rgb({settings.playheadColor.r},{settings.playheadColor.g},{settings.playheadColor.b});" onclick={() => openRgbPicker("playheadColor")}></button>
-          <span class="color-hex-label">{rgbToHex(settings.playheadColor.r, settings.playheadColor.g, settings.playheadColor.b)}</span>
-        </div>
-      </div>
+      <div class="section-title">Appearance</div>
+
       <div class="row">
         <span class="label-text">Graph</span>
         <div class="color-pick-group">
@@ -95,17 +89,51 @@
         </div>
       </div>
       <div class="row">
-        <span class="label-text">Max speed</span>
+        <span class="label-text">Playhead</span>
+        <div class="color-pick-group">
+          <button class="color-swatch clickable" style="background-color: rgb({settings.playheadColor.r},{settings.playheadColor.g},{settings.playheadColor.b});" onclick={() => openRgbPicker("playheadColor")}></button>
+          <span class="color-hex-label">{rgbToHex(settings.playheadColor.r, settings.playheadColor.g, settings.playheadColor.b)}</span>
+        </div>
+      </div>
+      <div class="row">
+        <span class="label-text">Peak speed</span>
         <div class="color-pick-group">
           <button class="color-swatch clickable" style="background-color: rgb({settings.graphMaxSpeedColor.r},{settings.graphMaxSpeedColor.g},{settings.graphMaxSpeedColor.b});" onclick={() => openRgbPicker("graphMaxSpeedColor")}></button>
           <span class="color-hex-label">{rgbToHex(settings.graphMaxSpeedColor.r, settings.graphMaxSpeedColor.g, settings.graphMaxSpeedColor.b)}</span>
         </div>
       </div>
+
+      <div class="subsection-divider"></div>
+
+      <div class="row slider-row">
+        <span class="label-text">Ghost stroke</span>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value={settings.ghostStrokeOpacity}
+          oninput={handleInput("ghostStrokeOpacity")}
+        />
+        <span class="slider-value">{settings.ghostStrokeOpacity.toFixed(2)}</span>
+      </div>
+      <div class="row slider-row">
+        <span class="label-text">Ghost fill</span>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value={settings.ghostFillOpacity}
+          oninput={handleInput("ghostFillOpacity")}
+        />
+        <span class="slider-value">{settings.ghostFillOpacity.toFixed(2)}</span>
+      </div>
     </div>
 
-    <!-- Timing -->
+    <!-- Performance -->
     <div class="section">
-      <div class="section-title">Timing</div>
+      <div class="section-title">Performance</div>
       <div class="row">
         <span class="label-text">Ghost fade</span>
         <div class="number-with-suffix">
@@ -150,32 +178,12 @@
       </div>
     </div>
 
-    <!-- Ghost Curves -->
+    <!-- Favorites -->
     <div class="section">
-      <div class="section-title">Ghost Curves</div>
-      <div class="row slider-row">
-        <span class="label-text">Stroke opacity</span>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={settings.ghostStrokeOpacity}
-          oninput={handleInput("ghostStrokeOpacity")}
-        />
-        <span class="value">{settings.ghostStrokeOpacity.toFixed(2)}</span>
-      </div>
-      <div class="row slider-row">
-        <span class="label-text">Fill opacity</span>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={settings.ghostFillOpacity}
-          oninput={handleInput("ghostFillOpacity")}
-        />
-        <span class="value">{settings.ghostFillOpacity.toFixed(2)}</span>
+      <div class="section-title">Favorites</div>
+      <div class="button-group">
+        <button class="action-btn" onclick={() => settings.clearFavorites()}>Clear Favorites</button>
+        <button class="action-btn" onclick={() => settings.seedDefaultFavorites()}>Restore Defaults</button>
       </div>
     </div>
 
@@ -185,14 +193,14 @@
       <div class="button-group">
         <button class="action-btn" onclick={() => settings.exportToFile()}>Export Settings</button>
         <button class="action-btn" onclick={handleImport}>Import Settings</button>
-        <button class="action-btn danger" onclick={handleReset}>Reset to Defaults</button>
+        <button class="action-btn danger" onclick={handleReset}>Reset All</button>
       </div>
     </div>
   </div>
 </div>
 {/if}
 
-<style lang="scss">
+<style>
   .backdrop {
     position: fixed;
     inset: 0;
@@ -206,7 +214,7 @@
     top: 0;
     bottom: 0;
     width: 100%;
-    background: #1a1a1a;
+    background: #1e1e1e;
     z-index: 901;
     display: flex;
     flex-direction: column;
@@ -219,7 +227,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 10px;
+    padding: 6px 8px;
     border-bottom: 1px solid #333;
     flex-shrink: 0;
   }
@@ -232,71 +240,87 @@
 
   .close-btn {
     cursor: pointer;
-    color: #aaa;
-    font-size: 14px;
+    color: #888;
+    font-size: 16px;
     line-height: 1;
     padding: 2px 4px;
     border-radius: 3px;
+    background: transparent;
+    border: none;
+    transition: color 0.15s;
+  }
 
-    &:hover {
-      color: #f5a623;
-    }
+  .close-btn:hover {
+    color: #f5a623;
   }
 
   .content {
     flex: 1;
     overflow-y: auto;
     padding: 6px;
+    scrollbar-width: none;
+  }
+
+  .content::-webkit-scrollbar {
+    display: none;
   }
 
   .section {
     background: #252525;
     border-radius: 4px;
-    padding: 8px;
-    margin-bottom: 6px;
+    padding: 6px 8px;
+    margin-bottom: 4px;
   }
 
   .section-title {
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 600;
-    color: #888;
+    color: #666;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 6px;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+
+  .subsection-divider {
+    height: 1px;
+    background: #333;
+    margin: 6px 0;
   }
 
   .row {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 3px 0;
+    padding: 2px 0;
   }
 
   .label-text {
     font-size: 11px;
-    color: #ccc;
+    color: #bbb;
     white-space: nowrap;
+    min-width: 0;
   }
 
-  .slider-row {
-    .label-text {
-      min-width: 60px;
-    }
+  /* Sliders */
+  .slider-row .label-text {
+    min-width: 55px;
+    flex-shrink: 0;
+  }
 
-    input[type="range"] {
-      flex: 1;
-      height: 3px;
-      accent-color: #f5a623;
-      cursor: pointer;
-    }
+  .slider-row input[type="range"] {
+    flex: 1;
+    height: 3px;
+    accent-color: #f5a623;
+    cursor: pointer;
+    min-width: 40px;
+  }
 
-    .value {
-      font-size: 10px;
-      color: #888;
-      min-width: 36px;
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-    }
+  .slider-value {
+    font-size: 10px;
+    color: #666;
+    min-width: 30px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
   }
 
   /* Checkbox */
@@ -310,6 +334,7 @@
   .text-input {
     background: #333;
     color: #e0e0e0;
+    border: 1px solid #444;
     border-radius: 3px;
     padding: 3px 6px;
     font-size: 11px;
@@ -317,6 +342,7 @@
     box-sizing: border-box;
   }
 
+  /* Colors */
   .color-pick-group {
     display: flex;
     align-items: center;
@@ -325,28 +351,31 @@
   }
 
   .color-swatch {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     border-radius: 3px;
-    border: 1px solid #555;
+    border: 1px solid #444;
     flex-shrink: 0;
+    padding: 0;
+    background: transparent;
+  }
 
-    &.clickable {
-      cursor: pointer;
+  .color-swatch.clickable {
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
 
-      &:hover {
-        border-color: #f5a623;
-        box-shadow: 0 0 0 1px #f5a623;
-      }
-    }
+  .color-swatch.clickable:hover {
+    border-color: #f5a623;
   }
 
   .color-hex-label {
     font-family: monospace;
     font-size: 10px;
-    color: #888;
+    color: #666;
   }
 
+  /* Number inputs */
   .number-with-suffix {
     display: flex;
     align-items: center;
@@ -355,51 +384,52 @@
   }
 
   .num-input {
-    width: 56px;
+    width: 48px;
     text-align: right;
   }
 
   .suffix {
     font-size: 10px;
-    color: #888;
+    color: #666;
   }
 
   /* Action buttons */
   .button-group {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
   }
 
   .action-btn {
     cursor: pointer;
     background: #333;
-    color: #aaa;
-    font-size: 11px;
-    padding: 6px 10px;
+    color: #999;
+    font-size: 10px;
+    padding: 5px 8px;
     border-radius: 3px;
+    border: none;
     text-align: center;
     transition: background 0.15s, color 0.15s;
-
-    &:hover {
-      background: #f5a623;
-      color: #1a1a1a;
-    }
-
-    &.danger:hover {
-      background: #d44;
-      color: #fff;
-    }
   }
 
-  /* Hide number input spinners in CEP */
+  .action-btn:hover {
+    background: #444;
+    color: #e0e0e0;
+  }
+
+  .action-btn.danger:hover {
+    background: #d44;
+    color: #fff;
+  }
+
+  /* Hide number input spinners */
   input[type="number"] {
     -moz-appearance: textfield;
+  }
 
-    &::-webkit-inner-spin-button,
-    &::-webkit-outer-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
-    }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
   }
 </style>

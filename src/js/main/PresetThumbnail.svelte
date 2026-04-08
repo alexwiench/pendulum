@@ -2,13 +2,14 @@
   import { computeSpeedGraph } from './curve-math';
   import { settings } from './settings.svelte';
 
-  let { x1, y1, x2, y2, size, onclick }: {
+  let { x1, y1, x2, y2, size, onclick, color }: {
     x1: number;
     y1: number;
     x2: number;
     y2: number;
     size: number;
     onclick: () => void;
+    color?: { r: number; g: number; b: number };
   } = $props();
 
   let canvas: HTMLCanvasElement;
@@ -50,7 +51,7 @@
     }
     if (maxSpeed === 0) maxSpeed = 1;
 
-    const { r, g, b } = settings.graphColor;
+    const { r, g, b } = color ?? settings.graphColor;
 
     // Build curve path
     ctx.beginPath();
@@ -82,9 +83,8 @@
 
   $effect(() => {
     x1; y1; x2; y2;
-    settings.graphColor.r;
-    settings.graphColor.g;
-    settings.graphColor.b;
+    if (color) { color.r; color.g; color.b; }
+    else { settings.graphColor.r; settings.graphColor.g; settings.graphColor.b; }
     scheduleDraw();
   });
 </script>
