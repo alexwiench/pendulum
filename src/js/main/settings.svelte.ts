@@ -9,7 +9,6 @@ const DEFAULTS = {
   playheadColor: { r: 74, g: 158, b: 255 },
   graphColor: { r: 74, g: 158, b: 255 },
   graphMaxSpeedColor: { r: 255, g: 74, b: 74 },
-  scaleSmoothing: 0.15,
   ghostFadeDuration: 300,
   playheadPollInterval: 100,
   selectionPollInterval: 1000,
@@ -25,7 +24,6 @@ class SettingsStore {
   playheadColor = $state({ ...DEFAULTS.playheadColor });
   graphColor = $state({ ...DEFAULTS.graphColor });
   graphMaxSpeedColor = $state({ ...DEFAULTS.graphMaxSpeedColor });
-  scaleSmoothing = $state(DEFAULTS.scaleSmoothing);
   ghostFadeDuration = $state(DEFAULTS.ghostFadeDuration);
   playheadPollInterval = $state(DEFAULTS.playheadPollInterval);
   selectionPollInterval = $state(DEFAULTS.selectionPollInterval);
@@ -42,7 +40,6 @@ class SettingsStore {
       playheadColor: { ...this.playheadColor },
       graphColor: { ...this.graphColor },
       graphMaxSpeedColor: { ...this.graphMaxSpeedColor },
-      scaleSmoothing: this.scaleSmoothing,
       ghostFadeDuration: this.ghostFadeDuration,
       playheadPollInterval: this.playheadPollInterval,
       selectionPollInterval: this.selectionPollInterval,
@@ -69,8 +66,6 @@ class SettingsStore {
         }
       }
     }
-    if (typeof data.scaleSmoothing === "number" && data.scaleSmoothing >= 0.01 && data.scaleSmoothing <= 1)
-      this.scaleSmoothing = data.scaleSmoothing;
     if (typeof data.ghostFadeDuration === "number" && data.ghostFadeDuration >= 50 && data.ghostFadeDuration <= 2000)
       this.ghostFadeDuration = data.ghostFadeDuration;
     if (typeof data.playheadPollInterval === "number" && data.playheadPollInterval >= 50 && data.playheadPollInterval <= 500)
@@ -117,7 +112,6 @@ class SettingsStore {
     this.playheadColor = { ...DEFAULTS.playheadColor };
     this.graphColor = { ...DEFAULTS.graphColor };
     this.graphMaxSpeedColor = { ...DEFAULTS.graphMaxSpeedColor };
-    this.scaleSmoothing = DEFAULTS.scaleSmoothing;
     this.ghostFadeDuration = DEFAULTS.ghostFadeDuration;
     this.playheadPollInterval = DEFAULTS.playheadPollInterval;
     this.selectionPollInterval = DEFAULTS.selectionPollInterval;
