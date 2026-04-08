@@ -114,30 +114,6 @@
     <div class="section">
       <div class="section-title">Canvas</div>
       <div class="row slider-row">
-        <span class="label-text">Size</span>
-        <input
-          type="range"
-          min="150"
-          max="400"
-          step="1"
-          value={settings.canvasSize}
-          oninput={handleInput("canvasSize", "int")}
-        />
-        <span class="value">{settings.canvasSize}px</span>
-      </div>
-      <div class="row slider-row">
-        <span class="label-text">Padding</span>
-        <input
-          type="range"
-          min="5"
-          max="50"
-          step="1"
-          value={settings.canvasPadding}
-          oninput={handleInput("canvasPadding", "int")}
-        />
-        <span class="value">{settings.canvasPadding}px</span>
-      </div>
-      <div class="row slider-row">
         <span class="label-text">Scale smoothing</span>
         <input
           type="range"

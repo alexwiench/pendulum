@@ -3,6 +3,8 @@
   import { evalTS } from "../lib/utils/bolt";
   import { settings } from "./settings.svelte";
 
+  let { onOpenSettings }: { onOpenSettings?: () => void } = $props();
+
   // --- State ---
   let p1 = $state({ x: 0.25, y: 0.0 });
   let p2 = $state({ x: 0.75, y: 1.0 });
@@ -13,6 +15,7 @@
   let viewMode: "curve" | "graph" = $state(settings.defaultViewMode);
 
   let canvasEl: HTMLCanvasElement;
+  let canvasWidth = $state(0);
 
   // Independent influence state for graph mode (0–100, default 50 = smooth ease)
   let influenceIn = $state(50.0);
@@ -51,9 +54,9 @@
       : `cubic-bezier(${p1.x.toFixed(2)}, ${p1.y.toFixed(2)}, ${p2.x.toFixed(2)}, ${p2.y.toFixed(2)})`
   );
 
-  // --- Canvas dimensions (reactive from settings) ---
-  let SIZE = $derived(settings.canvasSize);
-  let PAD = $derived(settings.canvasPadding);
+  // --- Canvas dimensions (fill container width) ---
+  let SIZE = $derived(canvasWidth > 0 ? canvasWidth : 250);
+  const PAD = 20;
   let DRAW = $derived(SIZE - PAD * 2);
   const HIT_RADIUS = 12;
 
@@ -619,8 +622,7 @@
     ghostCurves;
     ghostOpacity;
     playheadPos;
-    settings.canvasSize;
-    settings.canvasPadding;
+    SIZE;
     settings.curveColor;
     settings.graphFillColor;
     settings.playheadColor;
@@ -803,12 +805,20 @@
       class:active={viewMode === 'graph'}
       onclick={() => { viewMode = 'graph'; }}
     >Graph</button>
+    {#if onOpenSettings}
+      <button class="gear-btn" onclick={onOpenSettings} title="Settings">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M6.5.75a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.72a5.5 5.5 0 0 1 1.43.6l.51-.51a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 0 1 0 1.06l-.51.51c.26.45.46.93.6 1.43h.72a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-.75.75h-.72a5.5 5.5 0 0 1-.6 1.43l.51.51a.75.75 0 0 1 0 1.06l-1.06 1.06a.75.75 0 0 1-1.06 0l-.51-.51a5.5 5.5 0 0 1-1.43.6v.72a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75v-.72a5.5 5.5 0 0 1-1.43-.6l-.51.51a.75.75 0 0 1-1.06 0L2.44 12.5a.75.75 0 0 1 0-1.06l.51-.51a5.5 5.5 0 0 1-.6-1.43H1.63a.75.75 0 0 1-.75-.75v-1.5a.75.75 0 0 1 .75-.75h.72c.14-.5.34-.98.6-1.43l-.51-.51a.75.75 0 0 1 0-1.06L3.5 2.44a.75.75 0 0 1 1.06 0l.51.51A5.5 5.5 0 0 1 6.5 2.35V.75zM8 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/>
+        </svg>
+      </button>
+    {/if}
   </div>
 
   <canvas
     bind:this={canvasEl}
+    bind:clientWidth={canvasWidth}
     class="curve-canvas"
-    style="width: {SIZE}px; height: {SIZE}px; cursor: {viewMode === 'graph'
+    style="cursor: {viewMode === 'graph'
       ? (graphDragging ? 'grabbing' : 'grab')
       : dragging
         ? 'grabbing'
@@ -888,12 +898,15 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    align-items: center;
+    width: 100%;
+    max-width: 400px;
   }
 
   .curve-canvas {
     border-radius: 4px;
     display: block;
+    width: 100%;
+    aspect-ratio: 1;
   }
 
   .presets {
@@ -927,6 +940,22 @@
     display: flex;
     gap: 4px;
     width: 100%;
+    align-items: center;
+  }
+
+  .gear-btn {
+    all: unset;
+    cursor: pointer;
+    color: #666;
+    padding: 2px;
+    border-radius: 3px;
+    transition: color 0.15s;
+    line-height: 0;
+    margin-left: 4px;
+
+    &:hover {
+      color: #f5a623;
+    }
   }
 
   .toggle-btn {
@@ -956,6 +985,7 @@
     display: flex;
     gap: 8px;
     width: 100%;
+    min-width: 0;
   }
 
   .slider-group {
@@ -963,6 +993,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    min-width: 0;
   }
 
   .slider-label {
@@ -975,6 +1006,7 @@
   .influence-range {
     flex: 1;
     height: 3px;
+    min-width: 0;
     -webkit-appearance: none;
     appearance: none;
     background: #333;
