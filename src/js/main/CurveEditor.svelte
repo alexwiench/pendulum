@@ -5,7 +5,7 @@
   import { evalTS } from "../lib/utils/bolt";
   import { settings } from "./settings.svelte";
   import { presets } from "./presets.svelte";
-  import { computeSpeedGraph, findPeakTime } from "./curve-math";
+  import { computeSpeedGraph, findPeakTime, bezierValue, hexToRgb, sampleBezierCurve } from "./curve-math";
   import AnchorGrid from "./AnchorGrid.svelte";
   import PresetThumbnail from "./PresetThumbnail.svelte";
 
@@ -15,6 +15,7 @@
   let p1 = $state({ x: 0.25, y: 0.0 });
   let p2 = $state({ x: 0.75, y: 1.0 });
   let dragging: "p1" | "p2" | null = $state(null);
+  let dragViewport: { min: number; max: number } | null = null;
   let hovering: "p1" | "p2" | null = $state(null);
   let graphDragStart: { normX: number; normY: number; infl: number; out: number } | null = $state(null);
   let graphDragging = $derived(graphDragStart !== null);
@@ -90,11 +91,42 @@
     };
   }
 
-  // Color based on frame density — blue when plenty of frames, red when sparse
-  function speedToColor(normalizedSpeed: number, totalFrames: number, alpha = 1): string {
+  // --- Value graph auto-scaling viewport (linear, driven by user's curve) ---
+  // Sample the active bezier to find the actual curve range (like speed graph does)
+  let curveRange = $derived.by(() => {
+    let lo = 0, hi = 1;
+    // Sample the curve path
+    for (let i = 0; i <= 50; i++) {
+      const t = i / 50;
+      const y = bezierValue(t, p1.x, p1.y, p2.x, p2.y);
+      if (y < lo) lo = y;
+      if (y > hi) hi = y;
+    }
+    // Include handle positions so they stay visible
+    lo = Math.min(lo, p1.y, p2.y);
+    hi = Math.max(hi, p1.y, p2.y);
+    return { lo, hi };
+  });
+  let curveViewSpan = $derived(curveRange.hi - curveRange.lo);
+  let curveViewMin = $derived(curveRange.lo - curveViewSpan * 0.1);
+  let curveViewMax = $derived(curveRange.hi + curveViewSpan * 0.1);
+
+  function curveModeToCanvas(nx: number, ny: number): [number, number] {
+    return [PAD + nx * DRAW, PAD + ((curveViewMax - ny) / (curveViewMax - curveViewMin)) * DRAW];
+  }
+
+  function curveModeFromCanvas(cx: number, cy: number): { x: number; y: number } {
+    return {
+      x: (cx - PAD) / DRAW,
+      y: curveViewMax - ((cy - PAD) / DRAW) * (curveViewMax - curveViewMin),
+    };
+  }
+
+  // Color based on frame density — base color when plenty of frames, red when sparse
+  function speedToColor(normalizedSpeed: number, totalFrames: number, baseColor?: { r: number; g: number; b: number }, alpha = 1): string {
     const frameDensity = totalFrames / Math.max(normalizedSpeed, 0.01);
     const t = Math.max(0, Math.min(1, 1 - (frameDensity - 3) / 5));
-    const lo = settings.graphColor;
+    const lo = baseColor ?? settings.graphColor;
     const hi = settings.graphMaxSpeedColor;
     const r = Math.round(lo.r + (hi.r - lo.r) * t);
     const g = Math.round(lo.g + (hi.g - lo.g) * t);
@@ -129,34 +161,59 @@
     ctx.fillRect(0, 0, SIZE, SIZE);
 
     // Grid lines
-    for (let i = 0; i <= 4; i++) {
-      const t = i / 4;
-      const [gx, gy] = toCanvas(t, 0);
-      const [, gy2] = toCanvas(t, 1);
-      const [gx3] = toCanvas(0, t);
-      const [gx4] = toCanvas(1, t);
+    if (viewMode === "curve") {
+      // Value graph: vertical time divisions + y=0 and y=1 baselines
+      for (let i = 0; i <= 4; i++) {
+        const t = i / 4;
+        const [vx] = curveModeToCanvas(t, 0);
+        ctx.strokeStyle = i === 2 ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.06)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(vx, PAD);
+        ctx.lineTo(vx, PAD + DRAW);
+        ctx.stroke();
+      }
+      // y=0 and y=1 reference lines
+      for (const yVal of [0, 1]) {
+        const [, hy] = curveModeToCanvas(0, yVal);
+        ctx.strokeStyle = "rgba(255,255,255,0.12)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(PAD, hy);
+        ctx.lineTo(PAD + DRAW, hy);
+        ctx.stroke();
+      }
+    } else {
+      // Speed graph: fixed [0,1] grid
+      for (let i = 0; i <= 4; i++) {
+        const t = i / 4;
+        const [gx, gy] = toCanvas(t, 0);
+        const [, gy2] = toCanvas(t, 1);
+        const [gx3] = toCanvas(0, t);
+        const [gx4] = toCanvas(1, t);
 
-      ctx.strokeStyle =
-        i === 2 ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.06)";
-      ctx.lineWidth = 1;
+        ctx.strokeStyle =
+          i === 2 ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.06)";
+        ctx.lineWidth = 1;
 
-      // Vertical
-      ctx.beginPath();
-      ctx.moveTo(gx, gy);
-      ctx.lineTo(gx, gy2);
-      ctx.stroke();
+        // Vertical
+        ctx.beginPath();
+        ctx.moveTo(gx, gy);
+        ctx.lineTo(gx, gy2);
+        ctx.stroke();
 
-      // Horizontal
-      ctx.beginPath();
-      ctx.moveTo(gx3, gy);
-      ctx.lineTo(gx4, gy);
-      ctx.stroke();
+        // Horizontal
+        ctx.beginPath();
+        ctx.moveTo(gx3, gy);
+        ctx.lineTo(gx4, gy);
+        ctx.stroke();
+      }
     }
 
-    // Diagonal reference line (linear) — only in curve mode
+    // Diagonal reference line (linear) — only in value graph mode
     if (viewMode === "curve") {
-      const [lx0, ly0] = toCanvas(0, 0);
-      const [lx1, ly1] = toCanvas(1, 1);
+      const [lx0, ly0] = curveModeToCanvas(0, 0);
+      const [lx1, ly1] = curveModeToCanvas(1, 1);
       ctx.setLineDash([4, 4]);
       ctx.strokeStyle = "rgba(255,255,255,0.08)";
       ctx.lineWidth = 1;
@@ -176,19 +233,102 @@
     drawToolbarIcons(ctx);
   }
 
-  function drawCurveMode(ctx: CanvasRenderingContext2D) {
-    const [cx0, cy0] = toCanvas(0, 0);
-    const [cx1, cy1] = toCanvas(p1.x, p1.y);
-    const [cx2, cy2] = toCanvas(p2.x, p2.y);
-    const [cx3, cy3] = toCanvas(1, 1);
+  function drawPlayhead(ctx: CanvasRenderingContext2D) {
+    if (playheadPos === null) return;
+    const clampedPh = Math.max(0, Math.min(1, playheadPos));
+    const edgeDist = Math.min(clampedPh, 1 - clampedPh);
+    const phOpacity = Math.min(1, edgeDist / 0.03);
+    const [phX] = toCanvas(clampedPh, 0);
+    const pc = settings.playheadColor;
+    const phColor = `rgba(${pc.r}, ${pc.g}, ${pc.b}, ${phOpacity})`;
 
-    // Bezier curve
-    ctx.strokeStyle = settings.curveColor;
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = phColor;
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(cx0, cy0);
-    ctx.bezierCurveTo(cx1, cy1, cx2, cy2, cx3, cy3);
+    ctx.moveTo(phX, PAD);
+    ctx.lineTo(phX, PAD + DRAW);
     ctx.stroke();
+
+    const chipW = 8;
+    const chipH = 10;
+    const chipY = PAD - chipH;
+    ctx.fillStyle = phColor;
+    ctx.beginPath();
+    ctx.moveTo(phX - chipW / 2, chipY);
+    ctx.lineTo(phX + chipW / 2, chipY);
+    ctx.lineTo(phX + chipW / 2, chipY + chipH * 0.6);
+    ctx.lineTo(phX, chipY + chipH);
+    ctx.lineTo(phX - chipW / 2, chipY + chipH * 0.6);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawCurveMode(ctx: CanvasRenderingContext2D) {
+    const [cx0, cy0] = curveModeToCanvas(0, 0);
+    const [cx1, cy1] = curveModeToCanvas(p1.x, p1.y);
+    const [cx2, cy2] = curveModeToCanvas(p2.x, p2.y);
+    const [cx3, cy3] = curveModeToCanvas(1, 1);
+
+    // --- Ghost curves (existing keyframe easing, drawn behind) ---
+    if (ghostCurves.length > 0 && ghostOpacity > 0) {
+      for (let gi = 0; gi < ghostCurves.length; gi++) {
+        const g = ghostCurves[gi];
+        const color = GHOST_COLORS[gi % GHOST_COLORS.length];
+        const ghostPts = sampleBezierCurve(g.x1, g.y1, g.x2, g.y2, 60);
+
+        // Ghost fill
+        ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${settings.ghostFillOpacity * ghostOpacity})`;
+        ctx.beginPath();
+        ctx.moveTo(...curveModeToCanvas(0, 0));
+        for (const pt of ghostPts) {
+          ctx.lineTo(...curveModeToCanvas(pt.x, pt.y));
+        }
+        ctx.lineTo(...curveModeToCanvas(1, 0));
+        ctx.closePath();
+        ctx.fill();
+
+        // Ghost stroke (sampled to handle non-linear viewport)
+        ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${settings.ghostStrokeOpacity * ghostOpacity})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let si = 0; si <= 60; si++) {
+          const [sx, sy] = curveModeToCanvas(ghostPts[si].x, ghostPts[si].y);
+          if (si === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        }
+        ctx.stroke();
+      }
+    }
+
+    // --- Fill under main curve ---
+    const curveRgb = hexToRgb(settings.curveColor);
+    if (curveRgb) {
+      const fillPts = sampleBezierCurve(p1.x, p1.y, p2.x, p2.y, 100);
+      ctx.fillStyle = `rgba(${curveRgb.r}, ${curveRgb.g}, ${curveRgb.b}, 0.08)`;
+      ctx.beginPath();
+      ctx.moveTo(...curveModeToCanvas(0, 0));
+      for (const pt of fillPts) {
+        ctx.lineTo(...curveModeToCanvas(pt.x, pt.y));
+      }
+      ctx.lineTo(...curveModeToCanvas(1, 0));
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Per-segment colored bezier stroke (speed warning like the speed graph)
+    const totalFrames = ghostCurves.length > 0 ? ghostCurves[0].fps * ghostCurves[0].duration : Infinity;
+    const curveRgbForStroke = hexToRgb(settings.curveColor) ?? { r: 245, g: 166, b: 35 };
+    const curvePts = computeSpeedGraph(p1.x, p1.y, p2.x, p2.y, 100);
+    const curveCanvasPts = curvePts.map(pt => curveModeToCanvas(pt.time, bezierValue(pt.time, p1.x, p1.y, p2.x, p2.y)));
+    ctx.lineWidth = 2.5;
+    for (let i = 1; i < curveCanvasPts.length; i++) {
+      const avgSpd = (curvePts[i - 1].speed + curvePts[i].speed) / 2;
+      ctx.strokeStyle = speedToColor(avgSpd, totalFrames, curveRgbForStroke);
+      ctx.beginPath();
+      ctx.moveTo(curveCanvasPts[i - 1][0], curveCanvasPts[i - 1][1]);
+      ctx.lineTo(curveCanvasPts[i][0], curveCanvasPts[i][1]);
+      ctx.stroke();
+    }
 
     // Handle lines
     ctx.strokeStyle = "rgba(255,255,255,0.3)";
@@ -203,11 +343,18 @@
     ctx.stroke();
 
     // Endpoint dots
-    drawEndpoints(ctx);
+    ctx.fillStyle = "#666";
+    for (const [ex, ey] of [[cx0, cy0], [cx3, cy3]]) {
+      ctx.beginPath();
+      ctx.arc(ex, ey, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Handle circles
     drawHandle(ctx, cx1, cy1, "p1");
     drawHandle(ctx, cx2, cy2, "p2");
+
+    drawPlayhead(ctx);
   }
 
   function drawGraphMode(ctx: CanvasRenderingContext2D) {
@@ -323,38 +470,7 @@
     drawHandle(ctx, inHx, inHy, "in");
     drawHandle(ctx, outHx, outHy, "out");
 
-    // Playhead indicator (styled like the AE CTI)
-    if (playheadPos !== null) {
-      const clampedPh = Math.max(0, Math.min(1, playheadPos));
-      // Fade opacity near edges (entering/exiting)
-      const edgeDist = Math.min(clampedPh, 1 - clampedPh);
-      const phOpacity = Math.min(1, edgeDist / 0.03);
-      const [phX] = toCanvas(clampedPh, 0);
-      const pc = settings.playheadColor;
-      const phColor = `rgba(${pc.r}, ${pc.g}, ${pc.b}, ${phOpacity})`;
-
-      // Vertical line
-      ctx.strokeStyle = phColor;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(phX, PAD);
-      ctx.lineTo(phX, PAD + DRAW);
-      ctx.stroke();
-
-      // Chip at the top
-      const chipW = 8;
-      const chipH = 10;
-      const chipY = PAD - chipH;
-      ctx.fillStyle = phColor;
-      ctx.beginPath();
-      ctx.moveTo(phX - chipW / 2, chipY);
-      ctx.lineTo(phX + chipW / 2, chipY);
-      ctx.lineTo(phX + chipW / 2, chipY + chipH * 0.6);
-      ctx.lineTo(phX, chipY + chipH);
-      ctx.lineTo(phX - chipW / 2, chipY + chipH * 0.6);
-      ctx.closePath();
-      ctx.fill();
-    }
+    drawPlayhead(ctx);
 
     // Show a dashed vertical line when the active curve's peak timing aligns with a ghost's peak
     if (allGhostPoints.length > 0 && ghostOpacity > 0) {
@@ -380,20 +496,6 @@
           ctx.setLineDash([]);
         }
       }
-    }
-  }
-
-  function drawEndpoints(ctx: CanvasRenderingContext2D) {
-    const [cx0, cy0] = toCanvas(0, 0);
-    const [cx3, cy3] = toCanvas(1, 1);
-    for (const [ex, ey] of [
-      [cx0, cy0],
-      [cx3, cy3],
-    ]) {
-      ctx.fillStyle = "#666";
-      ctx.beginPath();
-      ctx.arc(ex, ey, 3, 0, Math.PI * 2);
-      ctx.fill();
     }
   }
 
@@ -514,8 +616,8 @@
   }
 
   function hitTest(pos: { x: number; y: number }): "p1" | "p2" | null {
-    const [cx1, cy1] = toCanvas(p1.x, p1.y);
-    const [cx2, cy2] = toCanvas(p2.x, p2.y);
+    const [cx1, cy1] = curveModeToCanvas(p1.x, p1.y);
+    const [cx2, cy2] = curveModeToCanvas(p2.x, p2.y);
     const d1 = Math.sqrt((pos.x - cx1) ** 2 + (pos.y - cy1) ** 2);
     const d2 = Math.sqrt((pos.x - cx2) ** 2 + (pos.y - cy2) ** 2);
 
@@ -570,6 +672,7 @@
     const hit = hitTest(pos);
     if (hit) {
       dragging = hit;
+      dragViewport = { min: curveViewMin, max: curveViewMax };
     }
   }
 
@@ -610,16 +713,17 @@
       return;
     }
 
-    if (dragging) {
+    if (dragging && dragViewport) {
       e.preventDefault();
-      const norm = fromCanvas(pos.x, pos.y);
-      const clampedX = Math.max(0, Math.min(1, norm.x));
+      const cx = (pos.x - PAD) / DRAW;
+      const realY = dragViewport.max - ((pos.y - PAD) / DRAW) * (dragViewport.max - dragViewport.min);
+      const clampedX = Math.max(0.01, Math.min(0.99, cx));
       if (dragging === "p1") {
         p1.x = clampedX;
-        p1.y = norm.y;
+        p1.y = realY;
       } else {
         p2.x = clampedX;
-        p2.y = norm.y;
+        p2.y = realY;
       }
     } else {
       hovering = hitTest(pos);
@@ -636,6 +740,7 @@
     }
     if (dragging) {
       dragging = null;
+      dragViewport = null;
     }
     if (settings.autoApply && wasDragging) {
       handleApply();
@@ -650,21 +755,23 @@
   }
 
   function saveCurrentAsPreset() {
-    presets.add({ ...getCurrentBezier(), source: "user" });
+    presets.add({ ...getCurrentBezier(), source: "user", viewMode });
   }
 
   function saveGhostsAsPresets() {
     for (const g of ghostCurves) {
-      presets.add({ x1: g.x1, y1: g.y1, x2: g.x2, y2: g.y2, source: "ghost", name: g.name });
+      presets.add({ x1: g.x1, y1: g.y1, x2: g.x2, y2: g.y2, source: "ghost", viewMode, name: g.name });
     }
   }
 
-  function loadPreset(preset: { x1: number; y1: number; x2: number; y2: number }) {
-    if (viewMode === "graph" && Math.abs(preset.y1) < 0.001 && Math.abs(preset.y2 - 1) < 0.001) {
+  function loadPreset(preset: { x1: number; y1: number; x2: number; y2: number; viewMode?: "curve" | "graph" }) {
+    // Determine target mode: use stored viewMode, or heuristic for legacy presets
+    const targetMode = preset.viewMode ?? (Math.abs(preset.y1) < 0.001 && Math.abs(preset.y2 - 1) < 0.001 ? "graph" : "curve");
+    viewMode = targetMode;
+    if (targetMode === "graph") {
       influenceIn = preset.x1 * 100;
       influenceOut = (1 - preset.x2) * 100;
     } else {
-      if (viewMode === "graph") viewMode = "curve";
       p1 = { x: preset.x1, y: preset.y1 };
       p2 = { x: preset.x2, y: preset.y2 };
     }
@@ -925,6 +1032,7 @@
           <PresetThumbnail
             x1={preset.x1} y1={preset.y1}
             x2={preset.x2} y2={preset.y2}
+            viewMode={preset.viewMode}
             size={PRESET_SIZE}
             onclick={() => loadPreset(preset)}
           />

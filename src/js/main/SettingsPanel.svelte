@@ -1,6 +1,7 @@
 <script lang="ts">
   import { settings } from "./settings.svelte";
   import { evalTS } from "../lib/utils/bolt";
+  import { hexToRgb } from "./curve-math";
 
   type RGBField = "playheadColor" | "graphColor" | "graphMaxSpeedColor";
 
@@ -8,12 +9,6 @@
 
   function rgbToHex(r: number, g: number, b: number): string {
     return "#" + [r, g, b].map(c => c.toString(16).padStart(2, "0")).join("");
-  }
-
-  function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-    const m = hex.replace("#", "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
-    if (!m) return null;
-    return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
   }
 
   async function openRgbPicker(field: RGBField) {
