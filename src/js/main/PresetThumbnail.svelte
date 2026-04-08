@@ -12,6 +12,16 @@
   } = $props();
 
   let canvas: HTMLCanvasElement;
+  let drawRaf: number | null = null;
+  let lastDpr = 0;
+
+  function scheduleDraw() {
+    if (drawRaf) return;
+    drawRaf = requestAnimationFrame(() => {
+      drawRaf = null;
+      draw();
+    });
+  }
 
   function draw() {
     if (!canvas) return;
@@ -19,9 +29,14 @@
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = size * dpr;
-    canvas.height = size * dpr;
-    ctx.scale(dpr, dpr);
+    const targetW = size * dpr;
+    const targetH = size * dpr;
+    if (canvas.width !== targetW || canvas.height !== targetH || dpr !== lastDpr) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+      lastDpr = dpr;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Background
     ctx.fillStyle = '#1a1a1a';
@@ -70,7 +85,7 @@
     settings.graphColor.r;
     settings.graphColor.g;
     settings.graphColor.b;
-    draw();
+    scheduleDraw();
   });
 </script>
 

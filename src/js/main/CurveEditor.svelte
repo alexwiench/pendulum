@@ -16,16 +16,12 @@
   let graphDragging = $derived(graphDragStart !== null);
   let graphHandleDragging: "in" | "out" | null = $state(null);
   let graphHovering: "in" | "out" | null = $state(null);
-  let toolbarHover: "gear" | null = $state(null);
 
-  // Icon hit regions (pixel coords)
-  const ICON_SIZE = 18;
-  const ICON_PAD = 2;
-  let gearIconX = $derived(SIZE - ICON_SIZE - ICON_PAD);
+
   const GRID_GAP = 3;
   const GRID_COLS = 2;
-  const GRID_ROWS = 4;
-  const ROW_GAP = 6;
+  const GRID_ROWS = 5;
+  const ROW_GAP = 4;
   let gridCellSize = $derived(Math.floor((containerWidth - (GRID_COLS + GRID_ROWS - 2) * GRID_GAP - ROW_GAP) / (GRID_COLS + GRID_ROWS)));
   let canvasWidth = $derived(gridCellSize * GRID_ROWS + GRID_GAP * (GRID_ROWS - 1));
 
@@ -35,6 +31,8 @@
   // Influence state (0–100, default 50 = smooth ease)
   let influenceIn = $state(50.0);
   let influenceOut = $state(50.0);
+
+  const GRAPH_SAMPLES = 150;
 
   // Ghost curves: existing keyframe easing read from AE (one per property)
   type GhostEasing = { x1: number; y1: number; x2: number; y2: number; fps: number; duration: number; name: string };
@@ -48,6 +46,10 @@
   ];
   let ghostOpacity = $state(0);
   let ghostFadeRaf: number | null = null;
+
+  // Cached speed graph computations — only recompute when bezier params change
+  let cachedPoints = $derived(computeSpeedGraph(influenceIn / 100, 0, 1 - influenceOut / 100, 1, GRAPH_SAMPLES));
+  let cachedGhostPoints = $derived(ghostCurves.map(g => computeSpeedGraph(g.x1, g.y1, g.x2, g.y2, GRAPH_SAMPLES)));
   let playheadPos: number | null = $state(null); // rendered position (animated)
   let playheadTarget: number | null = null; // where we're heading (-0.05/1.05 for exit animation)
   let playheadRaf: number | null = null;
@@ -63,7 +65,7 @@
 
   // --- Canvas dimensions (fill container width) ---
   let SIZE = $derived(containerWidth > 0 ? canvasWidth : 250);
-  const PAD = 20;
+  const PAD = 10;
   let DRAW = $derived(SIZE - PAD * 2);
   const HIT_RADIUS = 12;
 
@@ -146,8 +148,6 @@
     }
 
     drawGraphMode(ctx);
-
-    drawToolbarIcons(ctx);
   }
 
   function drawPlayhead(ctx: CanvasRenderingContext2D) {
@@ -181,14 +181,8 @@
   }
 
   function drawGraphMode(ctx: CanvasRenderingContext2D) {
-    const x1 = influenceIn / 100;
-    const x2 = 1 - influenceOut / 100;
-    const points = computeSpeedGraph(x1, 0, x2, 1, 400);
-
-    // Compute ghost points for each property
-    const allGhostPoints = ghostCurves.map(g =>
-      computeSpeedGraph(g.x1, g.y1, g.x2, g.y2, 400)
-    );
+    const points = cachedPoints;
+    const allGhostPoints = cachedGhostPoints;
 
     // Scale Y-axis to the user's curve so it's always prominent
     let targetMaxSpeed = 0;
@@ -255,16 +249,23 @@
     ctx.closePath();
     ctx.fill();
 
-    // Per-segment colored stroke
+    // Per-segment colored stroke (batched by color)
     ctx.lineWidth = 2.5;
+    let batchColor = "";
+    ctx.beginPath();
     for (let i = 1; i < canvasPoints.length; i++) {
       const avgSpd = (points[i - 1].speed + points[i].speed) / 2;
-      ctx.strokeStyle = speedToColor(avgSpd, totalFrames);
-      ctx.beginPath();
-      ctx.moveTo(canvasPoints[i - 1][0], canvasPoints[i - 1][1]);
+      const color = speedToColor(avgSpd, totalFrames);
+      if (color !== batchColor) {
+        if (batchColor) ctx.stroke();
+        batchColor = color;
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(canvasPoints[i - 1][0], canvasPoints[i - 1][1]);
+      }
       ctx.lineTo(canvasPoints[i][0], canvasPoints[i][1]);
-      ctx.stroke();
     }
+    if (batchColor) ctx.stroke();
 
     // Endpoint dots at baseline
     for (const [dotX, dotY] of [[startX, startY], [endX, endY]]) {
@@ -344,57 +345,6 @@
     ctx.fill();
   }
 
-  function drawToolbarIcons(ctx: CanvasRenderingContext2D) {
-    const s = ICON_SIZE;
-
-    // Gear icon (top-right)
-    const gearHover = toolbarHover === "gear";
-
-    if (gearHover) {
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(gearIconX - 1, ICON_PAD - 1, s + 2, s + 2, 3);
-      ctx.stroke();
-    }
-
-    const gcx = gearIconX + s / 2;
-    const gcy = ICON_PAD + s / 2;
-    ctx.fillStyle = gearHover ? "#f5a623" : "#555";
-    // Gear teeth
-    const teeth = 6;
-    const outerR = s * 0.4;
-    const innerR = s * 0.28;
-    ctx.beginPath();
-    for (let i = 0; i < teeth; i++) {
-      const a1 = (i / teeth) * Math.PI * 2 - Math.PI / 2;
-      const a2 = ((i + 0.35) / teeth) * Math.PI * 2 - Math.PI / 2;
-      const a3 = ((i + 0.5) / teeth) * Math.PI * 2 - Math.PI / 2;
-      const a4 = ((i + 0.85) / teeth) * Math.PI * 2 - Math.PI / 2;
-      if (i === 0) {
-        ctx.moveTo(gcx + Math.cos(a1) * innerR, gcy + Math.sin(a1) * innerR);
-      } else {
-        ctx.lineTo(gcx + Math.cos(a1) * innerR, gcy + Math.sin(a1) * innerR);
-      }
-      ctx.lineTo(gcx + Math.cos(a2) * outerR, gcy + Math.sin(a2) * outerR);
-      ctx.lineTo(gcx + Math.cos(a3) * outerR, gcy + Math.sin(a3) * outerR);
-      ctx.lineTo(gcx + Math.cos(a4) * innerR, gcy + Math.sin(a4) * innerR);
-    }
-    ctx.closePath();
-    ctx.fill();
-    // Center hole
-    ctx.fillStyle = "#1a1a1a";
-    ctx.beginPath();
-    ctx.arc(gcx, gcy, s * 0.12, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  function toolbarHitTest(pos: { x: number; y: number }): "gear" | null {
-    if (pos.x >= gearIconX && pos.x <= gearIconX + ICON_SIZE &&
-        pos.y >= ICON_PAD && pos.y <= ICON_PAD + ICON_SIZE) return "gear";
-    return null;
-  }
-
   // --- Interaction ---
   // Use mouse events bound directly in onMount for CEP compatibility
   // (Svelte 5 event delegation + pointer events can fail in CEP's Chromium)
@@ -425,12 +375,6 @@
     e.preventDefault();
     const pos = getCanvasPos(e);
 
-    const toolbarHit = toolbarHitTest(pos);
-    if (toolbarHit === "gear") {
-      onOpenSettings();
-      return;
-    }
-
     const handleHit = graphHandleHitTest(pos);
     if (handleHit) {
       graphHandleDragging = handleHit;
@@ -443,10 +387,6 @@
   function onMouseMove(e: MouseEvent) {
     if (!canvasEl) return;
     const pos = getCanvasPos(e);
-
-    if (!graphHandleDragging && !graphDragging) {
-      toolbarHover = toolbarHitTest(pos);
-    }
 
     if (graphHandleDragging) {
       e.preventDefault();
@@ -518,13 +458,11 @@
 
   // --- Reactive redraw ---
   $effect(() => {
-    influenceIn;
-    influenceOut;
+    cachedPoints;
+    cachedGhostPoints;
     graphDragging;
     graphHovering;
     graphHandleDragging;
-    toolbarHover;
-    ghostCurves;
     ghostOpacity;
     playheadPos;
     SIZE;
@@ -701,11 +639,9 @@
     <canvas
       bind:this={canvasEl}
       class="curve-canvas"
-      style="width: {canvasWidth}px; height: {canvasWidth}px; cursor: {toolbarHover
-        ? 'pointer'
-        : graphHandleDragging ? 'ew-resize' : graphHovering ? 'ew-resize' : graphDragging ? 'grabbing' : 'grab'};"
+      style="width: {canvasWidth}px; height: {canvasWidth}px; cursor: {graphHandleDragging ? 'ew-resize' : graphHovering ? 'ew-resize' : graphDragging ? 'grabbing' : 'grab'};"
     ></canvas>
-    <div class="side-grid" style="grid-template-columns: repeat(2, {gridCellSize}px); grid-template-rows: repeat(4, {gridCellSize}px);">
+    <div class="side-grid" style="grid-template-columns: repeat({GRID_COLS}, {gridCellSize}px); grid-template-rows: repeat({GRID_ROWS}, {gridCellSize}px);">
       <div class="side-grid-anchor">
         <AnchorGrid />
       </div>
@@ -763,6 +699,26 @@
     {#if !settings.autoApply}
       <button class="apply-btn" onclick={handleApply}>Apply</button>
     {/if}
+    <button class="gear-btn" onclick={onOpenSettings}>
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+        <path d={(() => {
+          const cx = 8, cy = 8, teeth = 6, outerR = 6.4, innerR = 4.5;
+          let d = '';
+          for (let i = 0; i < teeth; i++) {
+            const a1 = (i / teeth) * Math.PI * 2 - Math.PI / 2;
+            const a2 = ((i + 0.35) / teeth) * Math.PI * 2 - Math.PI / 2;
+            const a3 = ((i + 0.5) / teeth) * Math.PI * 2 - Math.PI / 2;
+            const a4 = ((i + 0.85) / teeth) * Math.PI * 2 - Math.PI / 2;
+            const cmd = i === 0 ? 'M' : 'L';
+            d += `${cmd}${cx + Math.cos(a1) * innerR},${cy + Math.sin(a1) * innerR} `;
+            d += `L${cx + Math.cos(a2) * outerR},${cy + Math.sin(a2) * outerR} `;
+            d += `L${cx + Math.cos(a3) * outerR},${cy + Math.sin(a3) * outerR} `;
+            d += `L${cx + Math.cos(a4) * innerR},${cy + Math.sin(a4) * innerR} `;
+          }
+          return d + 'Z M6,8a2,2 0 1,0 4,0a2,2 0 1,0 -4,0Z';
+        })()}/>
+      </svg>
+    </button>
   </div>
 </div>
 
@@ -770,13 +726,13 @@
   .curve-editor {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     width: 100%;
   }
 
   .graph-row {
     display: flex;
-    gap: 6px;
+    gap: 4px;
   }
 
   .curve-canvas {
@@ -929,6 +885,26 @@
     accent-color: #f5a623;
     margin: 0;
     cursor: pointer;
+  }
+
+  .gear-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin-left: auto;
+    flex-shrink: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #555;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s;
+
+    &:hover {
+      color: #f5a623;
+    }
   }
 
   .apply-btn {
