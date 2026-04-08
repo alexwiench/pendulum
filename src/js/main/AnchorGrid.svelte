@@ -53,14 +53,13 @@
   }
 
   .anchor-dot {
-    all: unset;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     border-radius: 2px;
-    background: transparent !important;
-    padding: 0 !important;
+    background: transparent;
+    padding: 0;
     width: 100%;
     height: 100%;
     box-sizing: border-box;
@@ -77,7 +76,7 @@
   }
 
   .anchor-dot:hover {
-    background: transparent !important;
+    background: transparent;
   }
 
   .anchor-dot:hover::after {

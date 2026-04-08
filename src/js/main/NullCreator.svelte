@@ -19,14 +19,13 @@
 
 <style lang="scss">
   .null-btn {
-    all: unset;
     display: flex;
     align-items: center;
     gap: 6px;
     cursor: pointer;
-    padding: 6px 10px !important;
+    padding: 6px 10px;
     border-radius: 4px;
-    background: #252525 !important;
+    background: #252525;
     color: #aaa;
     font-size: 11px;
     font-weight: 500;
@@ -36,12 +35,12 @@
   }
 
   .null-btn:hover {
-    background: #333 !important;
+    background: #333;
     color: #f5a623;
   }
 
   .null-btn:active {
-    background: #2a2a2a !important;
+    background: #2a2a2a;
   }
 
   .null-icon {
