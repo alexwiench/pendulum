@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { evalTS } from "../lib/utils/bolt";
   import { settings } from "./settings.svelte";
+  import AnchorGrid from "./AnchorGrid.svelte";
 
   let { onOpenSettings }: { onOpenSettings: () => void } = $props();
 
@@ -981,7 +982,17 @@
               : 'crosshair'};"
     ></canvas>
     <div class="side-grid" style="grid-template-columns: repeat(2, {gridCellSize}px); grid-template-rows: repeat(4, {gridCellSize}px);">
-      {#each Array(GRID_COLS * GRID_ROWS) as _, i}
+      <div class="side-grid-anchor">
+        <AnchorGrid />
+      </div>
+      <button class="side-grid-cell side-grid-btn" title="Create Null" onclick={() => evalTS("createNull")}>
+        <svg viewBox="0 0 16 16" width="70%" height="70%" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="3" width="10" height="10" stroke-dasharray="3,4" />
+          <line x1="8" y1="5.5" x2="8" y2="10.5" />
+          <line x1="5.5" y1="8" x2="10.5" y2="8" />
+        </svg>
+      </button>
+      {#each Array(GRID_COLS * (GRID_ROWS - 2) - 1) as _, i}
         <div class="side-grid-cell"></div>
       {/each}
     </div>
@@ -1047,9 +1058,42 @@
     flex-shrink: 0;
   }
 
+  .side-grid-anchor {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+
+  .side-grid-anchor :global(.anchor-grid) {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+  }
+
   .side-grid-cell {
     background: #252525;
     border-radius: 3px;
+  }
+
+  .side-grid-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #252525 !important;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    color: #888;
+    padding: 0 !important;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .side-grid-btn:hover {
+    color: #f5a623;
+    background: #333 !important;
+  }
+
+  .side-grid-btn:active {
+    background: #2a2a2a !important;
   }
 
   .presets {

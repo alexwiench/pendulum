@@ -5,8 +5,6 @@
   import "../index.scss";
   import "./main.scss";
   import CurveEditor from "./CurveEditor.svelte";
-  import AnchorGrid from "./AnchorGrid.svelte";
-  import NullCreator from "./NullCreator.svelte";
   import SettingsPanel from "./SettingsPanel.svelte";
 
   let backgroundColor: string = $state("#232323");
@@ -25,14 +23,6 @@
   <div class="panel">
     <div class="section">
       <CurveEditor onOpenSettings={() => settingsOpen = true} />
-    </div>
-    <div class="section">
-      <h3 class="section-title">Anchor Point</h3>
-      <AnchorGrid />
-    </div>
-    <div class="section">
-      <h3 class="section-title">Null Objects</h3>
-      <NullCreator />
     </div>
   </div>
 </div>
