@@ -306,35 +306,6 @@
     margin: 0;
   }
 
-  /* Toggle group */
-  .toggle-group {
-    display: flex;
-    margin-left: auto;
-    gap: 1px;
-    background: #1a1a1a;
-    border-radius: 3px;
-    overflow: hidden;
-  }
-
-  .toggle-btn {
-    cursor: pointer;
-    padding: 3px 10px;
-    font-size: 10px;
-    color: #aaa;
-    background: #333;
-    transition: background 0.15s, color 0.15s;
-
-    &:hover {
-      color: #e0e0e0;
-    }
-
-    &.active {
-      background: #f5a623;
-      color: #1a1a1a;
-      font-weight: 600;
-    }
-  }
-
   /* Text / number inputs */
   .text-input {
     background: #333;
