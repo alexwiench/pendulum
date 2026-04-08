@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { subscribeBackgroundColor } from "../lib/utils/bolt";
   import { settings } from "./settings.svelte";
+  import { presets } from "./presets.svelte";
   import "../index.scss";
   import "./main.scss";
   import CurveEditor from "./CurveEditor.svelte";
@@ -11,6 +12,7 @@
   let settingsOpen = $state(false);
 
   settings.load();
+  presets.load();
 
   onMount(() => {
     if (window.cep) {

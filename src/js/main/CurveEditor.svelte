@@ -1,8 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { flip } from "svelte/animate";
+  import { slide } from "svelte/transition";
   import { evalTS } from "../lib/utils/bolt";
   import { settings } from "./settings.svelte";
+  import { presets } from "./presets.svelte";
+  import { computeSpeedGraph, findPeakTime } from "./curve-math";
   import AnchorGrid from "./AnchorGrid.svelte";
+  import PresetThumbnail from "./PresetThumbnail.svelte";
 
   let { onOpenSettings }: { onOpenSettings: () => void } = $props();
 
@@ -70,23 +75,8 @@
   let DRAW = $derived(SIZE - PAD * 2);
   const HIT_RADIUS = 12;
 
-  // --- Presets ---
-  const CURVE_PRESETS = [
-    { label: "Linear", p1: { x: 0.25, y: 0.25 }, p2: { x: 0.75, y: 0.75 } },
-    { label: "Ease In", p1: { x: 0.42, y: 0.0 }, p2: { x: 1.0, y: 1.0 } },
-    { label: "Ease Out", p1: { x: 0.0, y: 0.0 }, p2: { x: 0.58, y: 1.0 } },
-    { label: "In-Out", p1: { x: 0.42, y: 0.0 }, p2: { x: 0.58, y: 1.0 } },
-    { label: "Overshoot", p1: { x: 0.18, y: 0.89 }, p2: { x: 0.32, y: 1.28 } },
-  ];
-
-  const GRAPH_PRESETS = [
-    { label: "Linear", infl: 0, out: 0 },
-    { label: "Gentle", infl: 33, out: 33 },
-    { label: "Smooth", infl: 50, out: 50 },
-    { label: "Ease In", infl: 75, out: 0 },
-    { label: "Ease Out", infl: 0, out: 75 },
-    { label: "In-Out", infl: 75, out: 75 },
-  ];
+  // --- Preset thumbnail size ---
+  const PRESET_SIZE = 28;
 
   // --- Coordinate mapping ---
   function toCanvas(nx: number, ny: number): [number, number] {
@@ -98,59 +88,6 @@
       x: (cx - PAD) / DRAW,
       y: 1 - (cy - PAD) / DRAW,
     };
-  }
-
-  // --- Bezier sampling ---
-  function sampleBezier(t: number, v0: number, v1: number, v2: number, v3: number): number {
-    const mt = 1 - t;
-    return mt * mt * mt * v0 + 3 * mt * mt * t * v1 + 3 * mt * t * t * v2 + t * t * t * v3;
-  }
-
-  // Solve for bezier parameter given target x (time), using Newton's method
-  function solveBezierT(targetX: number, x1: number, x2: number): number {
-    let t = targetX;
-    for (let i = 0; i < 8; i++) {
-      const mt = 1 - t;
-      const x = 3 * mt * mt * t * x1 + 3 * mt * t * t * x2 + t * t * t;
-      const dx = 3 * mt * mt * x1 + 6 * mt * t * (x2 - x1) + 3 * t * t * (1 - x2);
-      if (Math.abs(dx) < 1e-8) break;
-      t -= (x - targetX) / dx;
-      t = Math.max(0, Math.min(1, t));
-    }
-    return t;
-  }
-
-  function bezierValue(time: number, x1: number, y1: number, x2: number, y2: number): number {
-    if (time <= 0) return 0;
-    if (time >= 1) return 1;
-    const t = solveBezierT(time, x1, x2);
-    return sampleBezier(t, 0, y1, y2, 1);
-  }
-
-  function findPeakTime(pts: Array<{time: number, speed: number}>): number {
-    let peakTime = 0, peakSpeed = 0;
-    for (let i = 0; i < pts.length; i++) {
-      if (pts[i].speed > peakSpeed) {
-        peakSpeed = pts[i].speed;
-        peakTime = pts[i].time;
-      }
-    }
-    return peakTime;
-  }
-
-  function computeSpeedGraph(x1: number, y1: number, x2: number, y2: number, samples: number): Array<{time: number, speed: number}> {
-    const dt = 0.002;
-    const points: Array<{time: number, speed: number}> = [];
-    for (let i = 0; i <= samples; i++) {
-      const time = i / samples;
-      const tLo = Math.max(0, time - dt);
-      const tHi = Math.min(1, time + dt);
-      const vLo = bezierValue(tLo, x1, y1, x2, y2);
-      const vHi = bezierValue(tHi, x1, y1, x2, y2);
-      const speed = (tHi > tLo) ? (vHi - vLo) / (tHi - tLo) : 0;
-      points.push({ time, speed });
-    }
-    return points;
   }
 
   // Color based on frame density — blue when plenty of frames, red when sparse
@@ -705,31 +642,37 @@
     }
   }
 
-  function applyCurvePreset(preset: (typeof CURVE_PRESETS)[number]) {
-    p1 = { ...preset.p1 };
-    p2 = { ...preset.p2 };
-    if (settings.autoApply) handleApply();
+  function getCurrentBezier(): { x1: number; y1: number; x2: number; y2: number } {
+    if (viewMode === "graph") {
+      return { x1: influenceIn / 100, y1: 0, x2: 1 - influenceOut / 100, y2: 1 };
+    }
+    return { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
   }
 
-  function applyGraphPreset(preset: (typeof GRAPH_PRESETS)[number]) {
-    influenceIn = preset.infl;
-    influenceOut = preset.out;
+  function saveCurrentAsPreset() {
+    presets.add({ ...getCurrentBezier(), source: "user" });
+  }
+
+  function saveGhostsAsPresets() {
+    for (const g of ghostCurves) {
+      presets.add({ x1: g.x1, y1: g.y1, x2: g.x2, y2: g.y2, source: "ghost", name: g.name });
+    }
+  }
+
+  function loadPreset(preset: { x1: number; y1: number; x2: number; y2: number }) {
+    if (viewMode === "graph" && Math.abs(preset.y1) < 0.001 && Math.abs(preset.y2 - 1) < 0.001) {
+      influenceIn = preset.x1 * 100;
+      influenceOut = (1 - preset.x2) * 100;
+    } else {
+      if (viewMode === "graph") viewMode = "curve";
+      p1 = { x: preset.x1, y: preset.y1 };
+      p2 = { x: preset.x2, y: preset.y2 };
+    }
     if (settings.autoApply) handleApply();
   }
 
   function handleApply() {
-    let x1: number, y1: number, x2: number, y2: number;
-    if (viewMode === "graph") {
-      x1 = influenceIn / 100;
-      y1 = 0;
-      x2 = 1 - influenceOut / 100;
-      y2 = 1;
-    } else {
-      x1 = p1.x;
-      y1 = p1.y;
-      x2 = p2.x;
-      y2 = p2.y;
-    }
+    const { x1, y1, x2, y2 } = getCurrentBezier();
     evalTS("applyBezierEasing", x1, y1, x2, y2)
       .then(() => {
         loadExistingEasing();
@@ -947,7 +890,7 @@
       <div class="side-grid-anchor">
         <AnchorGrid />
       </div>
-      <button class="side-grid-cell side-grid-btn" title="Create Null" onclick={() => evalTS("createNull")}>
+      <button class="side-grid-cell side-grid-btn has-tip" data-tip="Create Null" onclick={() => evalTS("createNull")}>
         <svg viewBox="0 0 16 16" width="70%" height="70%" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="3" y="3" width="10" height="10" stroke-dasharray="3,4" />
           <line x1="8" y1="5.5" x2="8" y2="10.5" />
@@ -960,26 +903,35 @@
     </div>
   </div>
 
-  <div class="presets">
-    {#if viewMode === 'graph'}
-      {#each GRAPH_PRESETS as preset}
-        <button
-          class="preset-btn"
-          onclick={() => applyGraphPreset(preset)}
-        >
-          {preset.label}
-        </button>
-      {/each}
-    {:else}
-      {#each CURVE_PRESETS as preset}
-        <button
-          class="preset-btn"
-          onclick={() => applyCurvePreset(preset)}
-        >
-          {preset.label}
-        </button>
-      {/each}
+  <div class="presets-row">
+    <button class="preset-save-btn has-tip" data-tip="Save curve" onclick={saveCurrentAsPreset}>
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5">
+        <line x1="8" y1="3" x2="8" y2="13" />
+        <line x1="3" y1="8" x2="13" y2="8" />
+      </svg>
+    </button>
+    {#if ghostCurves.length > 0}
+      <button class="preset-save-btn has-tip" data-tip="Save ghosts" onclick={saveGhostsAsPresets} transition:slide={{ axis: 'x', duration: 200 }}>
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5">
+          <line x1="8" y1="3" x2="8" y2="13" />
+          <line x1="3" y1="8" x2="13" y2="8" />
+          <circle cx="12" cy="4" r="2.5" fill="currentColor" stroke="none" opacity="0.4" />
+        </svg>
+      </button>
     {/if}
+    <div class="presets-scroll">
+      {#each presets.items as preset (preset.id)}
+        <div class="preset-slot" animate:flip={{ duration: 250 }}>
+          <PresetThumbnail
+            x1={preset.x1} y1={preset.y1}
+            x2={preset.x2} y2={preset.y2}
+            size={PRESET_SIZE}
+            onclick={() => loadPreset(preset)}
+          />
+          <button class="preset-delete" onclick={() => presets.remove(preset.id)}>&times;</button>
+        </div>
+      {/each}
+    </div>
   </div>
 
   <span class="bezier-string">{bezierString}</span>
@@ -1058,30 +1010,75 @@
     background: #2a2a2a;
   }
 
-  .presets {
+  .presets-row {
     display: flex;
-    flex-wrap: wrap;
     gap: 4px;
+    align-items: center;
     width: 100%;
   }
 
-  .preset-btn {
-    font-size: 10px;
-    padding: 3px 8px;
+  .preset-save-btn {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 3px;
     background: #252525;
-    color: #aaa;
+    color: #888;
     cursor: pointer;
-    transition: background 0.15s, color 0.15s;
+    padding: 0;
+    transition: color 0.15s, background 0.15s;
   }
 
-  .preset-btn:hover {
+  .preset-save-btn:hover {
     background: #333;
     color: #f5a623;
   }
 
-  .preset-btn:active {
+  .preset-save-btn:active {
     background: #2a2a2a;
+  }
+
+  .presets-scroll {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex: 1;
+    scrollbar-width: none;
+  }
+
+  .presets-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .preset-slot {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .preset-delete {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #d44;
+    color: white;
+    font-size: 9px;
+    line-height: 12px;
+    text-align: center;
+    padding: 0;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .preset-slot:hover .preset-delete {
+    opacity: 1;
   }
 
   .bezier-string {
@@ -1135,6 +1132,33 @@
 
   .apply-btn:active {
     background: #e09520;
+  }
+
+  .has-tip {
+    position: relative;
+  }
+
+  .has-tip::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 3px 7px;
+    border-radius: 3px;
+    background: #333;
+    color: #ccc;
+    font-size: 10px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    transition-delay: 0s;
+  }
+
+  .has-tip:hover::after {
+    opacity: 1;
+    transition-delay: 0.4s;
   }
 
 </style>
