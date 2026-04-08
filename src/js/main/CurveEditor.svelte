@@ -3,7 +3,7 @@
   import { evalTS } from "../lib/utils/bolt";
   import { settings } from "./settings.svelte";
 
-  let { onOpenSettings }: { onOpenSettings?: () => void } = $props();
+  let { onOpenSettings }: { onOpenSettings: () => void } = $props();
 
   // --- State ---
   let p1 = $state({ x: 0.25, y: 0.0 });
@@ -12,6 +12,15 @@
   let hovering: "p1" | "p2" | null = $state(null);
   let graphDragStart: { normX: number; normY: number; infl: number; out: number } | null = $state(null);
   let graphDragging = $derived(graphDragStart !== null);
+  let graphHandleDragging: "in" | "out" | null = $state(null);
+  let graphHovering: "in" | "out" | null = $state(null);
+  let toolbarHover: "mode" | "gear" | null = $state(null);
+
+  // Icon hit regions (pixel coords)
+  const ICON_SIZE = 18;
+  const ICON_PAD = 2;
+  const modeIconRect = { x: ICON_PAD, y: ICON_PAD };
+  let gearIconX = $derived(SIZE - ICON_SIZE - ICON_PAD);
   let viewMode: "curve" | "graph" = $state(settings.defaultViewMode);
 
   let canvasEl: HTMLCanvasElement;
@@ -225,6 +234,8 @@
     } else {
       drawGraphMode(ctx);
     }
+
+    drawToolbarIcons(ctx);
   }
 
   function drawCurveMode(ctx: CanvasRenderingContext2D) {
@@ -386,6 +397,25 @@
       ctx.fill();
     }
 
+    // Influence handles at baseline
+    const [inHx, inHy] = toCanvas(influenceIn / 100 * 0.45, 0);
+    const [outHx, outHy] = toCanvas(1 - influenceOut / 100 * 0.45, 0);
+
+    // Handle arms (lines from endpoints to handles)
+    ctx.strokeStyle = "rgba(245, 166, 35, 0.5)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(inHx, inHy);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(outHx, outHy);
+    ctx.stroke();
+
+    drawHandle(ctx, inHx, inHy, "in");
+    drawHandle(ctx, outHx, outHy, "out");
+
     // Playhead indicator (styled like the AE CTI)
     if (playheadPos !== null) {
       const clampedPh = Math.max(0, Math.min(1, playheadPos));
@@ -464,23 +494,104 @@
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
-    id: "p1" | "p2"
+    id: "p1" | "p2" | "in" | "out"
   ) {
-    const active = dragging === id || hovering === id;
-    const radius = active ? 8 : 6;
+    const isGraph = id === "in" || id === "out";
+    const active = dragging === id || hovering === id || graphHandleDragging === id || graphHovering === id;
+    const radius = isGraph ? (active ? 5 : 4) : (active ? 8 : 6);
 
     if (active) {
       // Glow
       ctx.fillStyle = "rgba(245, 166, 35, 0.2)";
       ctx.beginPath();
-      ctx.arc(x, y, 14, 0, Math.PI * 2);
+      ctx.arc(x, y, isGraph ? 10 : 14, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    ctx.fillStyle = active ? "#f5a623" : "#fff";
+    ctx.fillStyle = isGraph ? "#f5a623" : (active ? "#f5a623" : "#fff");
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  function drawToolbarIcons(ctx: CanvasRenderingContext2D) {
+    // Mode toggle icon (top-left) — shows the OTHER mode's icon
+    const modeHover = toolbarHover === "mode";
+    const s = ICON_SIZE;
+
+    if (modeHover) {
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(modeIconRect.x - 1, modeIconRect.y - 1, s + 2, s + 2, 3);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = modeHover ? "#ffcf70" : "#f5a623";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (viewMode === "curve") {
+      // Show speed graph icon (bell curve)
+      const x = modeIconRect.x, y = modeIconRect.y;
+      ctx.moveTo(x + 2, y + s - 2);
+      ctx.quadraticCurveTo(x + s * 0.35, y + s - 2, x + s / 2, y + 3);
+      ctx.quadraticCurveTo(x + s * 0.65, y + s - 2, x + s - 2, y + s - 2);
+    } else {
+      // Show bezier curve icon
+      const x = modeIconRect.x, y = modeIconRect.y;
+      ctx.moveTo(x + 2, y + s - 2);
+      ctx.bezierCurveTo(x + s * 0.4, y + s - 2, x + s * 0.6, y + 2, x + s - 2, y + 2);
+    }
+    ctx.stroke();
+
+    // Gear icon (top-right)
+    const gearHover = toolbarHover === "gear";
+
+    if (gearHover) {
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(gearIconX - 1, ICON_PAD - 1, s + 2, s + 2, 3);
+      ctx.stroke();
+    }
+
+    const gcx = gearIconX + s / 2;
+    const gcy = ICON_PAD + s / 2;
+    ctx.fillStyle = gearHover ? "#f5a623" : "#555";
+    // Gear teeth
+    const teeth = 6;
+    const outerR = s * 0.4;
+    const innerR = s * 0.28;
+    ctx.beginPath();
+    for (let i = 0; i < teeth; i++) {
+      const a1 = (i / teeth) * Math.PI * 2 - Math.PI / 2;
+      const a2 = ((i + 0.35) / teeth) * Math.PI * 2 - Math.PI / 2;
+      const a3 = ((i + 0.5) / teeth) * Math.PI * 2 - Math.PI / 2;
+      const a4 = ((i + 0.85) / teeth) * Math.PI * 2 - Math.PI / 2;
+      if (i === 0) {
+        ctx.moveTo(gcx + Math.cos(a1) * innerR, gcy + Math.sin(a1) * innerR);
+      } else {
+        ctx.lineTo(gcx + Math.cos(a1) * innerR, gcy + Math.sin(a1) * innerR);
+      }
+      ctx.lineTo(gcx + Math.cos(a2) * outerR, gcy + Math.sin(a2) * outerR);
+      ctx.lineTo(gcx + Math.cos(a3) * outerR, gcy + Math.sin(a3) * outerR);
+      ctx.lineTo(gcx + Math.cos(a4) * innerR, gcy + Math.sin(a4) * innerR);
+    }
+    ctx.closePath();
+    ctx.fill();
+    // Center hole
+    ctx.fillStyle = "#1a1a1a";
+    ctx.beginPath();
+    ctx.arc(gcx, gcy, s * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function toolbarHitTest(pos: { x: number; y: number }): "mode" | "gear" | null {
+    if (pos.x >= modeIconRect.x && pos.x <= modeIconRect.x + ICON_SIZE &&
+        pos.y >= modeIconRect.y && pos.y <= modeIconRect.y + ICON_SIZE) return "mode";
+    if (pos.x >= gearIconX && pos.x <= gearIconX + ICON_SIZE &&
+        pos.y >= ICON_PAD && pos.y <= ICON_PAD + ICON_SIZE) return "gear";
+    return null;
   }
 
   // --- Interaction ---
@@ -509,13 +620,42 @@
     return null;
   }
 
+  function graphHandleHitTest(pos: { x: number; y: number }): "in" | "out" | null {
+    const [inHx, inHy] = toCanvas(influenceIn / 100 * 0.45, 0);
+    const [outHx, outHy] = toCanvas(1 - influenceOut / 100 * 0.45, 0);
+    const dIn = Math.sqrt((pos.x - inHx) ** 2 + (pos.y - inHy) ** 2);
+    const dOut = Math.sqrt((pos.x - outHx) ** 2 + (pos.y - outHy) ** 2);
+
+    if (dIn <= HIT_RADIUS && dOut <= HIT_RADIUS) {
+      return dIn <= dOut ? "in" : "out";
+    }
+    if (dIn <= HIT_RADIUS) return "in";
+    if (dOut <= HIT_RADIUS) return "out";
+    return null;
+  }
+
   function onMouseDown(e: MouseEvent) {
     e.preventDefault();
     const pos = getCanvasPos(e);
 
+    // Toolbar icons (both modes)
+    const toolbarHit = toolbarHitTest(pos);
+    if (toolbarHit === "mode") {
+      viewMode = viewMode === "curve" ? "graph" : "curve";
+      return;
+    }
+    if (toolbarHit === "gear") {
+      onOpenSettings();
+      return;
+    }
+
     if (viewMode === "graph") {
+      const handleHit = graphHandleHitTest(pos);
+      if (handleHit) {
+        graphHandleDragging = handleHit;
+        return;
+      }
       const norm = fromCanvas(pos.x, pos.y);
-      graphDragging = true;
       graphDragStart = { normX: norm.x, normY: norm.y, infl: influenceIn, out: influenceOut };
       return;
     }
@@ -530,8 +670,28 @@
     if (!canvasEl) return;
     const pos = getCanvasPos(e);
 
+    // Toolbar hover (both modes, but only when not dragging)
+    if (!dragging && !graphHandleDragging && !graphDragging) {
+      toolbarHover = toolbarHitTest(pos);
+    }
+
     if (viewMode === "graph") {
-      if (!graphDragging || !graphDragStart) return;
+      if (graphHandleDragging) {
+        e.preventDefault();
+        const norm = fromCanvas(pos.x, pos.y);
+        if (graphHandleDragging === "in") {
+          const nx = Math.max(0, Math.min(0.45, norm.x));
+          influenceIn = (nx / 0.45) * 100;
+        } else {
+          const nx = Math.max(0.55, Math.min(1, norm.x));
+          influenceOut = ((1 - nx) / 0.45) * 100;
+        }
+        return;
+      }
+      if (!graphDragging) {
+        graphHovering = graphHandleHitTest(pos);
+        return;
+      }
       e.preventDefault();
       const norm = fromCanvas(pos.x, pos.y);
       // Vertical: down on screen = more easing (both increase)
@@ -560,9 +720,12 @@
   }
 
   function onMouseUp() {
-    const wasDragging = graphDragging || dragging;
+    const wasDragging = graphDragging || dragging || graphHandleDragging;
     if (graphDragging) {
       graphDragStart = null;
+    }
+    if (graphHandleDragging) {
+      graphHandleDragging = null;
     }
     if (dragging) {
       dragging = null;
@@ -618,6 +781,9 @@
     hovering;
     dragging;
     graphDragging;
+    graphHovering;
+    graphHandleDragging;
+    toolbarHover;
     viewMode;
     ghostCurves;
     ghostOpacity;
@@ -794,69 +960,20 @@
 </script>
 
 <div class="curve-editor">
-  <div class="view-toggle">
-    <button
-      class="toggle-btn"
-      class:active={viewMode === 'curve'}
-      onclick={() => viewMode = 'curve'}
-    >Curve</button>
-    <button
-      class="toggle-btn"
-      class:active={viewMode === 'graph'}
-      onclick={() => { viewMode = 'graph'; }}
-    >Graph</button>
-    {#if onOpenSettings}
-      <button class="gear-btn" onclick={onOpenSettings} title="Settings">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M6.5.75a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.72a5.5 5.5 0 0 1 1.43.6l.51-.51a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 0 1 0 1.06l-.51.51c.26.45.46.93.6 1.43h.72a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-.75.75h-.72a5.5 5.5 0 0 1-.6 1.43l.51.51a.75.75 0 0 1 0 1.06l-1.06 1.06a.75.75 0 0 1-1.06 0l-.51-.51a5.5 5.5 0 0 1-1.43.6v.72a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75v-.72a5.5 5.5 0 0 1-1.43-.6l-.51.51a.75.75 0 0 1-1.06 0L2.44 12.5a.75.75 0 0 1 0-1.06l.51-.51a5.5 5.5 0 0 1-.6-1.43H1.63a.75.75 0 0 1-.75-.75v-1.5a.75.75 0 0 1 .75-.75h.72c.14-.5.34-.98.6-1.43l-.51-.51a.75.75 0 0 1 0-1.06L3.5 2.44a.75.75 0 0 1 1.06 0l.51.51A5.5 5.5 0 0 1 6.5 2.35V.75zM8 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/>
-        </svg>
-      </button>
-    {/if}
-  </div>
-
   <canvas
     bind:this={canvasEl}
     bind:clientWidth={canvasWidth}
     class="curve-canvas"
-    style="cursor: {viewMode === 'graph'
-      ? (graphDragging ? 'grabbing' : 'grab')
-      : dragging
-        ? 'grabbing'
-        : hovering
-          ? 'grab'
-          : 'crosshair'};"
+    style="cursor: {toolbarHover
+      ? 'pointer'
+      : viewMode === 'graph'
+        ? (graphHandleDragging ? 'ew-resize' : graphHovering ? 'ew-resize' : graphDragging ? 'grabbing' : 'grab')
+        : dragging
+          ? 'grabbing'
+          : hovering
+            ? 'grab'
+            : 'crosshair'};"
   ></canvas>
-
-  {#if viewMode === 'graph'}
-    <div class="influence-sliders">
-      <div class="slider-group">
-        <label class="slider-label" for="influence-in">In</label>
-        <input
-          id="influence-in"
-          type="range"
-          class="influence-range"
-          min="0"
-          max="100"
-          value={Math.round(100 - influenceIn)}
-          oninput={(e) => { influenceIn = 100 - parseInt(e.currentTarget.value); }}
-        />
-        <span class="slider-value">{Math.round(influenceIn)}</span>
-      </div>
-      <div class="slider-group">
-        <label class="slider-label" for="influence-out">Out</label>
-        <input
-          id="influence-out"
-          type="range"
-          class="influence-range"
-          min="0"
-          max="100"
-          value={Math.round(influenceOut)}
-          oninput={(e) => { influenceOut = parseInt(e.currentTarget.value); }}
-        />
-        <span class="slider-value">{Math.round(influenceOut)}</span>
-      </div>
-    </div>
-  {/if}
 
   <div class="presets">
     {#if viewMode === 'graph'}
@@ -934,101 +1051,6 @@
 
   .preset-btn:active {
     background: #2a2a2a !important;
-  }
-
-  .view-toggle {
-    display: flex;
-    gap: 4px;
-    width: 100%;
-    align-items: center;
-  }
-
-  .gear-btn {
-    all: unset;
-    cursor: pointer;
-    color: #666;
-    padding: 2px;
-    border-radius: 3px;
-    transition: color 0.15s;
-    line-height: 0;
-    margin-left: 4px;
-
-    &:hover {
-      color: #f5a623;
-    }
-  }
-
-  .toggle-btn {
-    all: unset;
-    flex: 1;
-    font-size: 10px;
-    padding: 3px 8px !important;
-    border-radius: 3px;
-    background: #252525 !important;
-    color: #aaa;
-    cursor: pointer;
-    text-align: center;
-    transition: background 0.15s, color 0.15s;
-  }
-
-  .toggle-btn:hover {
-    background: #333 !important;
-    color: #f5a623;
-  }
-
-  .toggle-btn.active {
-    background: #f5a623 !important;
-    color: #1a1a1a;
-  }
-
-  .influence-sliders {
-    display: flex;
-    gap: 8px;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .slider-group {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    min-width: 0;
-  }
-
-  .slider-label {
-    font-size: 9px;
-    color: #666;
-    min-width: 20px;
-    text-transform: uppercase;
-  }
-
-  .influence-range {
-    flex: 1;
-    height: 3px;
-    min-width: 0;
-    -webkit-appearance: none;
-    appearance: none;
-    background: #333;
-    border-radius: 2px;
-    outline: none;
-  }
-
-  .influence-range::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #4a9eff;
-    cursor: ew-resize;
-  }
-
-  .slider-value {
-    font-family: monospace;
-    font-size: 9px;
-    color: #4a9eff;
-    min-width: 18px;
-    text-align: right;
   }
 
   .bezier-string {
