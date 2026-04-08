@@ -279,6 +279,9 @@ export const getSelectedKeyframeEasing = () => {
 
       var keys = getTargetKeys(prop);
 
+      // Only show ghost for exactly 2 selected keys (one pair)
+      if (keys.length !== 2) continue;
+
       // Find first pair of adjacent keyframes for this property
       for (var k = 0; k < keys.length - 1; k++) {
         var k1 = keys[k];
