@@ -47,6 +47,170 @@
   let ghostOpacity = $state(0);
   let ghostFadeRaf: number | null = null;
 
+  // --- Drag-to-favorites state ---
+  let draggingPreset: { x1: number; y1: number; x2: number; y2: number } | null = $state(null);
+  let dragPos = $state({ x: 0, y: 0 });
+  let dragStartPos = $state({ x: 0, y: 0 });
+  let dragActive = $state(false);
+  let dragOverFavorites = $state(false);
+  let favoritesRowEl: HTMLDivElement = $state(null!);
+  let clickSuppressed = $state(false);
+
+  // --- Favorites UI state ---
+  let favoritesExpanded = $state(false);
+  let editingFavoriteId: string | null = $state(null);
+
+  // --- Favorites reorder drag state ---
+  let reorderDragIndex: number | null = $state(null);
+  let reorderTargetIndex: number | null = $state(null);
+  let reorderDragActive = $state(false);
+
+  const PRESET_DRAG_THRESHOLD = 5;
+  const FAVORITES_COLLAPSED_ROWS = 2;
+
+  function startPresetDrag(preset: { x1: number; y1: number; x2: number; y2: number }, e: MouseEvent) {
+    if (e.button !== 0) return;
+
+    draggingPreset = preset;
+    dragStartPos = { x: e.clientX, y: e.clientY };
+    dragPos = { x: e.clientX, y: e.clientY };
+    dragActive = false;
+    clickSuppressed = false;
+
+    let favRect: DOMRect | null = null;
+
+    const onMove = (ev: MouseEvent) => {
+      dragPos.x = ev.clientX;
+      dragPos.y = ev.clientY;
+      if (!dragActive) {
+        const dx = ev.clientX - dragStartPos.x;
+        const dy = ev.clientY - dragStartPos.y;
+        if (dx * dx + dy * dy > PRESET_DRAG_THRESHOLD * PRESET_DRAG_THRESHOLD) {
+          dragActive = true;
+          clickSuppressed = true;
+          if (favoritesRowEl) favRect = favoritesRowEl.getBoundingClientRect();
+        }
+      }
+      if (dragActive && favRect) {
+        dragOverFavorites =
+          ev.clientX >= favRect.left && ev.clientX <= favRect.right &&
+          ev.clientY >= favRect.top && ev.clientY <= favRect.bottom;
+      }
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (dragActive && dragOverFavorites && draggingPreset) {
+        settings.addFavorite(draggingPreset);
+      }
+      draggingPreset = null;
+      dragActive = false;
+      dragOverFavorites = false;
+      setTimeout(() => { clickSuppressed = false; }, 0);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  function startFavoriteReorder(index: number, e: MouseEvent) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let active = false;
+    reorderDragIndex = index;
+    reorderTargetIndex = index;
+    reorderDragActive = false;
+
+    let slotCenters: Array<{ cx: number; cy: number }> = [];
+
+    const onMove = (ev: MouseEvent) => {
+      if (!active) {
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        if (dx * dx + dy * dy > PRESET_DRAG_THRESHOLD * PRESET_DRAG_THRESHOLD) {
+          active = true;
+          reorderDragActive = true;
+          const els = favoritesRowEl.querySelectorAll<HTMLElement>('.favorite-slot:not(.favorite-drop-placeholder)');
+          slotCenters = Array.from(els).map((el) => {
+            const rect = el.getBoundingClientRect();
+            return { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 };
+          });
+        } else return;
+      }
+      let closest = index;
+      let closestDist = Infinity;
+      for (let i = 0; i < slotCenters.length; i++) {
+        const dist = Math.abs(ev.clientX - slotCenters[i].cx) + Math.abs(ev.clientY - slotCenters[i].cy);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closest = i;
+        }
+      }
+      reorderTargetIndex = closest;
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (active && reorderDragIndex !== null && reorderTargetIndex !== null && reorderDragIndex !== reorderTargetIndex) {
+        settings.reorderFavorites(reorderDragIndex, reorderTargetIndex);
+      }
+      reorderDragIndex = null;
+      reorderTargetIndex = null;
+      reorderDragActive = false;
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  function focusRenameInput(el: HTMLInputElement) {
+    el.focus();
+    el.select();
+  }
+
+  function scrollOverflow(el: HTMLElement) {
+    const slot = el.closest('.favorite-slot') as HTMLElement | null;
+    const target = slot ?? el.parentElement;
+    let anim: Animation | null = null;
+
+    function getOverflow() {
+      const parent = el.parentElement;
+      if (!parent) return 0;
+      return el.scrollWidth - parent.clientWidth;
+    }
+
+    function onEnter() {
+      const overflow = getOverflow();
+      if (overflow <= 1) return;
+      const dur = Math.max(800, overflow * 50);
+      anim = el.animate(
+        [{ transform: 'translateX(0)' }, { transform: `translateX(-${overflow}px)` }],
+        { duration: dur, delay: 300, iterations: Infinity, direction: 'alternate', easing: 'linear' },
+      );
+    }
+
+    function onLeave() {
+      if (anim) { anim.cancel(); anim = null; }
+      el.style.transform = '';
+    }
+
+    target?.addEventListener('mouseenter', onEnter);
+    target?.addEventListener('mouseleave', onLeave);
+
+    return {
+      destroy() {
+        if (anim) anim.cancel();
+        target?.removeEventListener('mouseenter', onEnter);
+        target?.removeEventListener('mouseleave', onLeave);
+      }
+    };
+  }
+
   // Cached speed graph computations — only recompute when bezier params change
   let cachedPoints = $derived(computeSpeedGraph(influenceIn / 100, 0, 1 - influenceOut / 100, 1, GRAPH_SAMPLES));
   let cachedGhostPoints = $derived(ghostCurves.map(g => computeSpeedGraph(g.x1, g.y1, g.x2, g.y2, GRAPH_SAMPLES)));
@@ -703,6 +867,10 @@
     </div>
   </div>
 
+  {#if !settings.autoApply}
+    <button class="apply-btn" onclick={handleApply}>Apply</button>
+  {/if}
+
   <div class="presets-row">
     <button class="preset-save-btn has-tip" data-tip="Save curve" onclick={saveCurrentAsPreset}>
       <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -721,18 +889,125 @@
     {/if}
     <div class="presets-scroll">
       {#each presets.items as preset (preset.id)}
-        <div class="preset-slot" animate:flip={{ duration: 250 }}>
+        <div class="preset-slot" animate:flip={{ duration: 250 }} onmousedown={(e) => startPresetDrag(preset, e)}>
           <PresetThumbnail
             x1={preset.x1} y1={preset.y1}
             x2={preset.x2} y2={preset.y2}
             size={PRESET_SIZE}
-            onclick={() => loadPreset(preset)}
+            onclick={() => { if (!clickSuppressed) loadPreset(preset); }}
           />
           <button class="preset-delete" onclick={() => presets.remove(preset.id)}>&times;</button>
         </div>
       {/each}
     </div>
   </div>
+
+  <div
+    class="favorites-section"
+    class:drag-over={dragOverFavorites}
+    class:dragging={dragActive}
+    bind:this={favoritesRowEl}
+  >
+    {#if settings.favorites.length === 0 && !dragActive}
+      <div class="favorites-empty">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 2.5l1.7 3.5 3.8.5-2.75 2.7.65 3.8L8 11.2 4.6 13l.65-3.8L2.5 6.5l3.8-.5z" />
+        </svg>
+        <span>Drag presets here to favorite</span>
+      </div>
+    {:else}
+      <div
+        class="favorites-grid"
+        class:expanded={favoritesExpanded}
+        style="--collapsed-rows: {FAVORITES_COLLAPSED_ROWS}; --item-size: {PRESET_SIZE + 20}px;"
+      >
+        {#if dragActive}
+          <div class="favorite-slot favorite-drop-placeholder">
+            <div class="favorite-thumb placeholder-thumb">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#555" stroke-width="1.5">
+                <line x1="8" y1="4" x2="8" y2="12" />
+                <line x1="4" y1="8" x2="12" y2="8" />
+              </svg>
+            </div>
+            <span class="favorite-name" style="color: #555;">Drop here</span>
+          </div>
+        {/if}
+        {#each settings.favorites as fav, i (fav.id)}
+          <div
+            class="favorite-slot"
+            class:reorder-dragging={reorderDragActive && reorderDragIndex === i}
+            class:reorder-target={reorderDragActive && reorderTargetIndex === i && reorderDragIndex !== i}
+            animate:flip={{ duration: 250 }}
+            onmousedown={(e) => { if (editingFavoriteId !== fav.id) startFavoriteReorder(i, e); }}
+          >
+            <div class="favorite-thumb" style="border-color: rgb({fav.color.r}, {fav.color.g}, {fav.color.b});">
+              <PresetThumbnail
+                x1={fav.x1} y1={fav.y1}
+                x2={fav.x2} y2={fav.y2}
+                size={PRESET_SIZE}
+                color={fav.color}
+                onclick={() => { if (!reorderDragActive) loadPreset(fav); }}
+              />
+            </div>
+            {#if editingFavoriteId === fav.id}
+              <input
+                class="favorite-name-input"
+                style="color: rgb({fav.color.r}, {fav.color.g}, {fav.color.b});"
+                value={fav.name}
+                maxlength="24"
+                use:focusRenameInput
+                onmousedown={(e) => e.stopPropagation()}
+                onblur={(e) => {
+                  const related = e.relatedTarget as HTMLElement | null;
+                  const slot = (e.target as HTMLElement).closest('.favorite-slot');
+                  if (related && slot?.contains(related)) return;
+                  settings.renameFavorite(fav.id, (e.target as HTMLInputElement).value.trim() || fav.name); editingFavoriteId = null;
+                }}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); }
+                  if (e.key === 'Escape') { editingFavoriteId = null; }
+                }}
+              />
+              <button
+                class="favorite-color-btn"
+                style="background: rgb({fav.color.r}, {fav.color.g}, {fav.color.b});"
+                onmousedown={(e) => e.stopPropagation()}
+                onclick={(e) => { e.stopPropagation(); settings.cycleFavoriteColor(fav.id); }}
+              ></button>
+              <button class="favorite-delete" onmousedown={(e) => e.stopPropagation()} onclick={() => settings.removeFavorite(fav.id)}>&times;</button>
+            {:else}
+              <span
+                class="favorite-name"
+                style="color: rgb({fav.color.r}, {fav.color.g}, {fav.color.b});"
+                onmousedown={(e) => e.stopPropagation()}
+                ondblclick={() => { editingFavoriteId = fav.id; }}
+              ><span class="favorite-name-inner" use:scrollOverflow>{fav.name}</span></span>
+            {/if}
+          </div>
+        {/each}
+      </div>
+      {#if settings.favorites.length > 0}
+        {@const itemsPerRow = Math.max(1, Math.floor((containerWidth + 2) / (PRESET_SIZE + 20 + 2)))}
+        {@const totalRows = Math.ceil(settings.favorites.length / itemsPerRow)}
+        {#if totalRows > FAVORITES_COLLAPSED_ROWS}
+          <button class="favorites-expand-btn" onclick={() => { favoritesExpanded = !favoritesExpanded; }}>
+            {favoritesExpanded ? "Show less" : `+${settings.favorites.length - itemsPerRow * FAVORITES_COLLAPSED_ROWS} more`}
+          </button>
+        {/if}
+      {/if}
+    {/if}
+  </div>
+
+  {#if dragActive && draggingPreset}
+    <div class="drag-preview" style="left: {dragPos.x}px; top: {dragPos.y}px;">
+      <PresetThumbnail
+        x1={draggingPreset.x1} y1={draggingPreset.y1}
+        x2={draggingPreset.x2} y2={draggingPreset.y2}
+        size={PRESET_SIZE}
+        onclick={() => {}}
+      />
+    </div>
+  {/if}
 
   <div class="bezier-string-wrap"
     onmouseenter={() => pasteInputEl?.focus()}
@@ -747,13 +1022,6 @@
   </div>
 
   <div class="apply-row">
-    <label class="auto-apply-toggle">
-      <input type="checkbox" checked={settings.autoApply} onchange={(e) => { settings.autoApply = (e.target as HTMLInputElement).checked; settings.save(); }} />
-      <span>Auto</span>
-    </label>
-    {#if !settings.autoApply}
-      <button class="apply-btn" onclick={handleApply}>Apply</button>
-    {/if}
     <button class="gear-btn" onclick={onOpenSettings}>
       <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
         <path d={(() => {
@@ -887,6 +1155,7 @@
   .preset-slot {
     position: relative;
     flex-shrink: 0;
+    cursor: grab;
   }
 
   .preset-delete {
@@ -909,6 +1178,183 @@
 
   .preset-slot:hover .preset-delete {
     opacity: 1;
+  }
+
+  /* --- Favorites --- */
+  .favorites-section {
+    width: 100%;
+    border: 1px dashed #333;
+    border-radius: 4px;
+    padding: 4px;
+    min-height: 32px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .favorites-section.dragging {
+    border-color: #555;
+    background: rgba(245, 166, 35, 0.03);
+  }
+
+  .favorites-section.drag-over {
+    border-color: #f5a623;
+    background: rgba(245, 166, 35, 0.08);
+  }
+
+  .favorites-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 24px;
+    color: #444;
+    font-size: 9px;
+    user-select: none;
+  }
+
+  .favorites-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    overflow: hidden;
+    max-height: calc(var(--collapsed-rows) * (var(--item-size) + 2px));
+    transition: max-height 0.25s ease;
+  }
+
+  .favorites-grid.expanded {
+    max-height: none;
+    overflow-y: auto;
+  }
+
+  .favorite-slot {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: var(--item-size);
+    flex-shrink: 0;
+  }
+
+  .favorite-thumb {
+    border-radius: 4px;
+    border: 1.5px solid;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .placeholder-thumb {
+    width: 28px;
+    height: 28px;
+    border-style: dashed;
+    border-color: #555;
+    background: #1a1a1a;
+  }
+
+  .favorite-name {
+    font-size: 9px;
+    max-width: calc(100% - 6px);
+    overflow: hidden;
+    white-space: nowrap;
+    opacity: 0.7;
+    cursor: default;
+    user-select: none;
+    text-align: center;
+    line-height: 15px;
+  }
+
+  .favorite-name-inner {
+    display: inline-block;
+  }
+
+  .favorite-name-input {
+    font-size: 9px;
+    max-width: 100%;
+    width: 100%;
+    background: #252525;
+    border: 1px solid #444;
+    border-radius: 2px;
+    text-align: center;
+    padding: 0 2px;
+    line-height: 15px;
+    outline: none;
+  }
+
+  .favorite-color-btn {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1.5px solid #1a1a1a;
+    padding: 0;
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+
+  .favorite-color-btn:hover {
+    transform: scale(1.2);
+  }
+
+  .favorite-delete {
+    position: absolute;
+    top: 0px;
+    right: 0px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #d44;
+    color: white;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    border: 1.5px solid #1a1a1a;
+    transition: transform 0.1s;
+  }
+
+  .favorite-delete:hover {
+    transform: scale(1.2);
+  }
+
+  .favorites-expand-btn {
+    width: 100%;
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 9px;
+    cursor: pointer;
+    padding: 2px 0;
+    transition: color 0.15s;
+  }
+
+  .favorites-expand-btn:hover {
+    color: #f5a623;
+  }
+
+  .favorite-drop-placeholder {
+    opacity: 0.5;
+  }
+
+  .favorite-slot.reorder-dragging {
+    opacity: 0.3;
+  }
+
+  .favorite-slot.reorder-target {
+    outline: 1px dashed #f5a623;
+    outline-offset: 1px;
+    border-radius: 3px;
+  }
+
+  .drag-preview {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.8;
+    transform: translate(-50%, -50%);
   }
 
   .bezier-string-wrap {
@@ -952,23 +1398,6 @@
     align-items: center;
   }
 
-  .auto-apply-toggle {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 10px;
-    color: #888;
-    cursor: pointer;
-    white-space: nowrap;
-    user-select: none;
-  }
-
-  .auto-apply-toggle input[type="checkbox"] {
-    accent-color: #f5a623;
-    margin: 0;
-    cursor: pointer;
-  }
-
   .gear-btn {
     display: flex;
     align-items: center;
@@ -990,13 +1419,14 @@
   }
 
   .apply-btn {
-    flex: 1;
-    padding: 8px 0;
+    width: 100%;
+    padding: 6px 0;
     border-radius: 4px;
+    border: none;
     background: #f5a623;
     color: #1a1a1a;
     font-weight: 600;
-    font-size: 12px;
+    font-size: 11px;
     cursor: pointer;
     text-align: center;
     box-sizing: border-box;

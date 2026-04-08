@@ -1,6 +1,49 @@
 const STORAGE_KEY = "pendulum-settings";
 const SETTINGS_VERSION = 1;
 
+export type FavoritePreset = {
+  id: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  name: string;
+  color: { r: number; g: number; b: number };
+  createdAt: number;
+};
+
+const FAVORITE_PALETTE: Array<{ r: number; g: number; b: number }> = [
+  { r: 77, g: 148, b: 214 },   // blue
+  { r: 209, g: 85, b: 120 },   // rose
+  { r: 64, g: 191, b: 155 },   // teal
+  { r: 230, g: 153, b: 51 },   // orange
+  { r: 163, g: 112, b: 207 },  // purple
+  { r: 214, g: 186, b: 60 },   // gold
+  { r: 72, g: 185, b: 199 },   // cyan
+  { r: 212, g: 90, b: 90 },    // red
+  { r: 96, g: 180, b: 96 },    // green
+  { r: 199, g: 112, b: 185 },  // magenta
+  { r: 142, g: 186, b: 72 },   // lime
+  { r: 108, g: 126, b: 199 },  // indigo
+];
+
+function clampByte(n: number): number {
+  return Math.max(0, Math.min(255, Math.round(n)));
+}
+
+function paletteIndexOf(color: { r: number; g: number; b: number }): number {
+  return FAVORITE_PALETTE.findIndex(
+    (c) => c.r === color.r && c.g === color.g && c.b === color.b,
+  );
+}
+
+const DEFAULT_FAVORITES: Array<Omit<FavoritePreset, "id" | "createdAt">> = [
+  { x1: 0.65, y1: 0, x2: 0.35, y2: 1, name: "Ease In Out", color: FAVORITE_PALETTE[0] },
+  { x1: 0.7, y1: 0, x2: 1, y2: 1, name: "Ease In", color: FAVORITE_PALETTE[1] },
+  { x1: 0, y1: 0, x2: 0.3, y2: 1, name: "Ease Out", color: FAVORITE_PALETTE[2] },
+  { x1: 0.25, y1: 0, x2: 0, y2: 1, name: "Smooth Decel", color: FAVORITE_PALETTE[3] },
+];
+
 const DEFAULTS = {
   autoApply: true,
   graphFillColor: "rgba(74, 158, 255, 0.08)",
@@ -25,6 +68,76 @@ class SettingsStore {
   selectionPollInterval = $state(DEFAULTS.selectionPollInterval);
   ghostStrokeOpacity = $state(DEFAULTS.ghostStrokeOpacity);
   ghostFillOpacity = $state(DEFAULTS.ghostFillOpacity);
+  favorites: FavoritePreset[] = $state([]);
+
+  nextFavoriteColor(): { r: number; g: number; b: number } {
+    const counts = new Map<number, number>();
+    for (let i = 0; i < FAVORITE_PALETTE.length; i++) counts.set(i, 0);
+    for (const fav of this.favorites) {
+      const idx = paletteIndexOf(fav.color);
+      if (idx >= 0) counts.set(idx, (counts.get(idx) ?? 0) + 1);
+    }
+    let minCount = Infinity;
+    let minIdx = 0;
+    for (const [idx, count] of counts) {
+      if (count < minCount) {
+        minCount = count;
+        minIdx = idx;
+      }
+    }
+    return { ...FAVORITE_PALETTE[minIdx] };
+  }
+
+  addFavorite(preset: { x1: number; y1: number; x2: number; y2: number }) {
+    const fav: FavoritePreset = {
+      id: crypto.randomUUID(),
+      x1: preset.x1,
+      y1: preset.y1,
+      x2: preset.x2,
+      y2: preset.y2,
+      name: `${preset.x1.toFixed(2)}, ${preset.x2.toFixed(2)}`,
+      color: this.nextFavoriteColor(),
+      createdAt: Date.now(),
+    };
+    this.favorites = [fav, ...this.favorites];
+    this.save();
+    return fav;
+  }
+
+  removeFavorite(id: string) {
+    this.favorites = this.favorites.filter((f) => f.id !== id);
+    this.save();
+  }
+
+  renameFavorite(id: string, name: string) {
+    this.favorites = this.favorites.map((f) =>
+      f.id === id ? { ...f, name } : f,
+    );
+    this.save();
+  }
+
+  cycleFavoriteColor(id: string) {
+    const fav = this.favorites.find((f) => f.id === id);
+    if (!fav) return;
+    const nextIdx = (paletteIndexOf(fav.color) + 1) % FAVORITE_PALETTE.length;
+    this.favorites = this.favorites.map((f) =>
+      f.id === id ? { ...f, color: { ...FAVORITE_PALETTE[nextIdx] } } : f,
+    );
+    this.save();
+  }
+
+  clearFavorites() {
+    this.favorites = [];
+    this.save();
+  }
+
+  reorderFavorites(fromIndex: number, toIndex: number) {
+    const items = [...this.favorites];
+    const [moved] = items.splice(fromIndex, 1);
+    items.splice(toIndex, 0, moved);
+    this.favorites = items;
+    this.save();
+  }
 
   toJSON(): Record<string, unknown> {
     return {
@@ -39,6 +152,7 @@ class SettingsStore {
       selectionPollInterval: this.selectionPollInterval,
       ghostStrokeOpacity: this.ghostStrokeOpacity,
       ghostFillOpacity: this.ghostFillOpacity,
+      favorites: this.favorites.map((f) => ({ ...f, color: { ...f.color } })),
     };
   }
 
@@ -50,9 +164,9 @@ class SettingsStore {
         const c = data[field] as Record<string, unknown>;
         if (typeof c.r === "number" && typeof c.g === "number" && typeof c.b === "number") {
           this[field] = {
-            r: Math.max(0, Math.min(255, Math.round(c.r))),
-            g: Math.max(0, Math.min(255, Math.round(c.g))),
-            b: Math.max(0, Math.min(255, Math.round(c.b))),
+            r: clampByte(c.r),
+            g: clampByte(c.g),
+            b: clampByte(c.b),
           };
         }
       }
@@ -67,6 +181,28 @@ class SettingsStore {
       this.ghostStrokeOpacity = data.ghostStrokeOpacity;
     if (typeof data.ghostFillOpacity === "number" && data.ghostFillOpacity >= 0 && data.ghostFillOpacity <= 1)
       this.ghostFillOpacity = data.ghostFillOpacity;
+    if (Array.isArray(data.favorites)) {
+      const valid: FavoritePreset[] = [];
+      for (const f of data.favorites) {
+        if (
+          f && typeof f === "object" &&
+          typeof f.id === "string" &&
+          typeof f.x1 === "number" && typeof f.y1 === "number" &&
+          typeof f.x2 === "number" && typeof f.y2 === "number" &&
+          typeof f.name === "string" &&
+          f.color && typeof f.color.r === "number" && typeof f.color.g === "number" && typeof f.color.b === "number" &&
+          typeof f.createdAt === "number"
+        ) {
+          valid.push({
+            id: f.id, x1: f.x1, y1: f.y1, x2: f.x2, y2: f.y2,
+            name: f.name,
+            color: { r: clampByte(f.color.r), g: clampByte(f.color.g), b: clampByte(f.color.b) },
+            createdAt: f.createdAt,
+          });
+        }
+      }
+      this.favorites = valid;
+    }
   }
 
   private _saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -89,10 +225,29 @@ class SettingsStore {
       if (raw) {
         const data = JSON.parse(raw);
         this.fromJSON(data);
+      } else {
+        this.seedDefaultFavorites();
       }
     } catch {
       // corrupt or unavailable — use defaults
     }
+  }
+
+  seedDefaultFavorites() {
+    const existing = this.favorites;
+    const toAdd = DEFAULT_FAVORITES.filter((def) =>
+      !existing.some((f) => f.x1 === def.x1 && f.y1 === def.y1 && f.x2 === def.x2 && f.y2 === def.y2),
+    );
+    if (toAdd.length === 0) return false;
+    const newFavs = toAdd.map((f) => ({
+      ...f,
+      color: { ...f.color },
+      id: crypto.randomUUID(),
+      createdAt: Date.now(),
+    }));
+    this.favorites = [...this.favorites, ...newFavs];
+    this.save();
+    return true;
   }
 
   reset() {
@@ -106,6 +261,7 @@ class SettingsStore {
     this.selectionPollInterval = DEFAULTS.selectionPollInterval;
     this.ghostStrokeOpacity = DEFAULTS.ghostStrokeOpacity;
     this.ghostFillOpacity = DEFAULTS.ghostFillOpacity;
+    this.favorites = [];
     this.save();
   }
 
