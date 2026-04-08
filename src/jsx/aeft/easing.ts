@@ -41,6 +41,34 @@ function isNumericProperty(prop: Property): boolean {
 }
 
 /**
+ * Computes average speed between two keyframe values over a time delta.
+ */
+function computeAvgSpeed(
+  v1: any,
+  v2: any,
+  dt: number,
+  dim: number,
+  easeDims: number,
+  multiDim: boolean
+): number {
+  if (easeDims === 1 && multiDim) {
+    // Spatial property: Euclidean distance for combined speed
+    var sum = 0;
+    var a = v1 as number[];
+    var b = v2 as number[];
+    for (var i = 0; i < a.length; i++) {
+      sum += (b[i] - a[i]) * (b[i] - a[i]);
+    }
+    return Math.sqrt(sum) / dt;
+  } else if (multiDim) {
+    // Non-spatial multi-dim (Scale): per-dimension speed
+    return Math.abs(((v2 as number[])[dim] - (v1 as number[])[dim]) / dt);
+  } else {
+    return Math.abs(((v2 as number) - (v1 as number)) / dt);
+  }
+}
+
+/**
  * Recursively collects all keyframed properties from a property group.
  */
 function collectKeyframedProperties(
@@ -162,26 +190,7 @@ export const applyBezierEasing = (
 
             outEase = [];
             for (var d = 0; d < easeDims; d++) {
-              var avgSpeed: number;
-              if (easeDims === 1 && multiDim) {
-                // Spatial property: compute Euclidean distance for combined speed
-                var sum = 0;
-                var cv = curVal as number[];
-                var nv = nextVal as number[];
-                for (var di = 0; di < cv.length; di++) {
-                  sum += (nv[di] - cv[di]) * (nv[di] - cv[di]);
-                }
-                avgSpeed = Math.sqrt(sum) / dt;
-              } else if (multiDim) {
-                // Non-spatial multi-dim (Scale): per-dimension speed
-                var dv = (nextVal as number[])[d] - (curVal as number[])[d];
-                avgSpeed = Math.abs(dv / dt);
-              } else {
-                // 1D property
-                avgSpeed = Math.abs(
-                  ((nextVal as number) - (curVal as number)) / dt
-                );
-              }
+              var avgSpeed = computeAvgSpeed(curVal, nextVal, dt, d, easeDims, multiDim);
               var outSpeed = x1 > 0 ? (y1 / x1) * avgSpeed : 0;
               outEase.push(new KeyframeEase(outSpeed, outInfluence));
             }
@@ -207,23 +216,7 @@ export const applyBezierEasing = (
 
             inEase = [];
             for (var d2 = 0; d2 < easeDims; d2++) {
-              var avgSpeed2: number;
-              if (easeDims === 1 && multiDim) {
-                var sum2 = 0;
-                var pv = prevVal as number[];
-                var cv2 = curVal2 as number[];
-                for (var di2 = 0; di2 < cv2.length; di2++) {
-                  sum2 += (cv2[di2] - pv[di2]) * (cv2[di2] - pv[di2]);
-                }
-                avgSpeed2 = Math.sqrt(sum2) / dt2;
-              } else if (multiDim) {
-                var dv2 = (curVal2 as number[])[d2] - (prevVal as number[])[d2];
-                avgSpeed2 = Math.abs(dv2 / dt2);
-              } else {
-                avgSpeed2 = Math.abs(
-                  ((curVal2 as number) - (prevVal as number)) / dt2
-                );
-              }
+              var avgSpeed2 = computeAvgSpeed(prevVal, curVal2, dt2, d2, easeDims, multiDim);
               var dy2 = 1 - y2;
               var inSpeed = dx2 > 0 ? (dy2 / dx2) * avgSpeed2 : 0;
               inEase.push(new KeyframeEase(inSpeed, inInfluence));
@@ -303,18 +296,7 @@ export const getSelectedKeyframeEasing = () => {
         var v1 = prop.keyValue(k1);
         var v2 = prop.keyValue(k2);
 
-        var avgSpeed: number;
-        if (multiDim) {
-          var sum = 0;
-          var a = v1 as number[];
-          var b = v2 as number[];
-          for (var di = 0; di < a.length; di++) {
-            sum += (b[di] - a[di]) * (b[di] - a[di]);
-          }
-          avgSpeed = Math.sqrt(sum) / dt;
-        } else {
-          avgSpeed = Math.abs(((v2 as number) - (v1 as number)) / dt);
-        }
+        var avgSpeed = computeAvgSpeed(v1, v2, dt, 0, 1, multiDim);
 
         var outEase = prop.keyOutTemporalEase(k1);
         var inEase = prop.keyInTemporalEase(k2);
@@ -329,8 +311,7 @@ export const getSelectedKeyframeEasing = () => {
         var bx2 = 1 - inInfl;
         var by2 = avgSpeed > 0 ? 1 - (inSpd / avgSpeed) * inInfl : 1;
 
-        // Compute playhead position for exactly 2 selected keys
-        if (playhead === null && keys.length === 2) {
+        if (playhead === null) {
           spanStart = t1;
           spanEnd = t2;
           var normalized = (comp.time - t1) / dt;

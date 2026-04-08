@@ -7,8 +7,8 @@
   let p2 = $state({ x: 0.75, y: 1.0 });
   let dragging: "p1" | "p2" | null = $state(null);
   let hovering: "p1" | "p2" | null = $state(null);
-  let graphDragging = $state(false);
-  let graphDragStart: { normX: number; normY: number; infl: number; out: number } | null = null;
+  let graphDragStart: { normX: number; normY: number; infl: number; out: number } | null = $state(null);
+  let graphDragging = $derived(graphDragStart !== null);
   let viewMode: "curve" | "graph" = $state("graph");
 
   let canvasEl: HTMLCanvasElement;
@@ -39,6 +39,7 @@
   // Smooth Y-axis scaling to avoid jarring jumps
   let smoothMaxSpeed = 1;
   let scaleAnimRaf: number | null = null;
+  let drawRaf: number | null = null;
 
   let bezierString = $derived(
     viewMode === "graph"
@@ -83,13 +84,11 @@
   }
 
   // --- Bezier sampling ---
-  // Sample a cubic bezier at parameter t: P0=(x0,y0), P1=(x1,y1), P2=(x2,y2), P3=(x3,y3)
   function sampleBezier(t: number, v0: number, v1: number, v2: number, v3: number): number {
     const mt = 1 - t;
     return mt * mt * mt * v0 + 3 * mt * mt * t * v1 + 3 * mt * t * t * v2 + t * t * t * v3;
   }
 
-  // --- Speed graph computation ---
   // Solve for bezier parameter given target x (time), using Newton's method
   function solveBezierT(targetX: number, x1: number, x2: number): number {
     let t = targetX;
@@ -104,13 +103,22 @@
     return t;
   }
 
-  // Get value at a given time (0-1) from cubic-bezier(x1, y1, x2, y2)
   function bezierValue(time: number, x1: number, y1: number, x2: number, y2: number): number {
     if (time <= 0) return 0;
     if (time >= 1) return 1;
     const t = solveBezierT(time, x1, x2);
-    const mt = 1 - t;
-    return 3 * mt * mt * t * y1 + 3 * mt * t * t * y2 + t * t * t;
+    return sampleBezier(t, 0, y1, y2, 1);
+  }
+
+  function findPeakTime(pts: Array<{time: number, speed: number}>): number {
+    let peakTime = 0, peakSpeed = 0;
+    for (let i = 0; i < pts.length; i++) {
+      if (pts[i].speed > peakSpeed) {
+        peakSpeed = pts[i].speed;
+        peakTime = pts[i].time;
+      }
+    }
+    return peakTime;
   }
 
   function computeSpeedGraph(x1: number, y1: number, x2: number, y2: number, samples: number): Array<{time: number, speed: number}> {
@@ -139,14 +147,26 @@
   }
 
   // --- Canvas rendering ---
+  function scheduleDraw() {
+    if (drawRaf) return;
+    drawRaf = requestAnimationFrame(() => {
+      drawRaf = null;
+      draw();
+    });
+  }
+
   function draw() {
     if (!canvasEl) return;
     const dpr = window.devicePixelRatio || 1;
     const ctx = canvasEl.getContext("2d")!;
 
-    canvasEl.width = SIZE * dpr;
-    canvasEl.height = SIZE * dpr;
-    ctx.scale(dpr, dpr);
+    const targetW = SIZE * dpr;
+    const targetH = SIZE * dpr;
+    if (canvasEl.width !== targetW || canvasEl.height !== targetH) {
+      canvasEl.width = targetW;
+      canvasEl.height = targetH;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Clear
     ctx.fillStyle = "#1a1a1a";
@@ -262,7 +282,7 @@
       if (scaleAnimRaf) cancelAnimationFrame(scaleAnimRaf);
       scaleAnimRaf = requestAnimationFrame(() => {
         scaleAnimRaf = null;
-        draw();
+        scheduleDraw();
       });
     } else {
       smoothMaxSpeed = targetMaxSpeed;
@@ -378,27 +398,10 @@
 
     // Show a dashed vertical line when the active curve's peak timing aligns with a ghost's peak
     if (allGhostPoints.length > 0 && ghostOpacity > 0) {
-      let activePeakTime = 0;
-      let activePeakSpeed = 0;
-      for (let i = 0; i < points.length; i++) {
-        if (points[i].speed > activePeakSpeed) {
-          activePeakSpeed = points[i].speed;
-          activePeakTime = points[i].time;
-        }
-      }
+      const activePeakTime = findPeakTime(points);
 
       for (let gi = 0; gi < allGhostPoints.length; gi++) {
-        const ghostPts = allGhostPoints[gi];
-
-        let ghostPeakTime = 0;
-        let ghostPeakSpeed = 0;
-        for (let i = 0; i < ghostPts.length; i++) {
-          if (ghostPts[i].speed > ghostPeakSpeed) {
-            ghostPeakSpeed = ghostPts[i].speed;
-            ghostPeakTime = ghostPts[i].time;
-          }
-        }
-
+        const ghostPeakTime = findPeakTime(allGhostPoints[gi]);
         const diff = Math.abs(activePeakTime - ghostPeakTime);
         const lineOpacity = Math.max(0, 1 - diff / 0.01) * ghostOpacity;
 
@@ -535,7 +538,6 @@
 
   function onMouseUp() {
     if (graphDragging) {
-      graphDragging = false;
       graphDragStart = null;
     }
     if (dragging) {
@@ -591,7 +593,7 @@
     ghostCurves;
     ghostOpacity;
     playheadPos;
-    draw();
+    scheduleDraw();
   });
 
   function ghostsChanged(a: GhostEasing[], b: GhostEasing[]): boolean {
@@ -735,7 +737,7 @@
     // mousemove and mouseup on window so drag continues outside canvas
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
-    draw();
+    scheduleDraw();
     loadExistingEasing();
 
     // Poll for keyframe selection changes (~1s interval)
@@ -747,6 +749,7 @@
       window.removeEventListener("mouseup", onMouseUp);
       clearInterval(pollInterval);
       stopPlayheadPoll();
+      if (drawRaf) cancelAnimationFrame(drawRaf);
     };
   });
 </script>
