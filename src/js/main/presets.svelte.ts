@@ -7,6 +7,7 @@ export type SavedPreset = {
   x2: number;
   y2: number;
   source: "user" | "ghost";
+  viewMode?: "curve" | "graph";
   name?: string;
   savedAt: number;
 };
