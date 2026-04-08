@@ -35,27 +35,6 @@ export function findPeakTime(pts: Array<{ time: number; speed: number }>): numbe
   return peakTime;
 }
 
-export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const m = hex.replace("#", "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
-  if (!m) return null;
-  return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
-}
-
-export function sampleBezierCurve(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  samples: number,
-): Array<{ x: number; y: number }> {
-  const points: Array<{ x: number; y: number }> = [];
-  for (let i = 0; i <= samples; i++) {
-    const time = i / samples;
-    points.push({ x: time, y: bezierValue(time, x1, y1, x2, y2) });
-  }
-  return points;
-}
-
 export function computeSpeedGraph(
   x1: number,
   y1: number,

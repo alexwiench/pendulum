@@ -3,8 +3,6 @@ const SETTINGS_VERSION = 1;
 
 const DEFAULTS = {
   autoApply: true,
-  defaultViewMode: "graph" as "curve" | "graph",
-  curveColor: "#f5a623",
   graphFillColor: "rgba(74, 158, 255, 0.08)",
   playheadColor: { r: 74, g: 158, b: 255 },
   graphColor: { r: 74, g: 158, b: 255 },
@@ -18,8 +16,6 @@ const DEFAULTS = {
 
 class SettingsStore {
   autoApply = $state(DEFAULTS.autoApply);
-  defaultViewMode: "curve" | "graph" = $state(DEFAULTS.defaultViewMode);
-  curveColor = $state(DEFAULTS.curveColor);
   graphFillColor = $state(DEFAULTS.graphFillColor);
   playheadColor = $state({ ...DEFAULTS.playheadColor });
   graphColor = $state({ ...DEFAULTS.graphColor });
@@ -34,8 +30,6 @@ class SettingsStore {
     return {
       version: SETTINGS_VERSION,
       autoApply: this.autoApply,
-      defaultViewMode: this.defaultViewMode,
-      curveColor: this.curveColor,
       graphFillColor: this.graphFillColor,
       playheadColor: { ...this.playheadColor },
       graphColor: { ...this.graphColor },
@@ -50,9 +44,6 @@ class SettingsStore {
 
   fromJSON(data: Record<string, unknown>) {
     if (typeof data.autoApply === "boolean") this.autoApply = data.autoApply;
-    if (data.defaultViewMode === "curve" || data.defaultViewMode === "graph")
-      this.defaultViewMode = data.defaultViewMode;
-    if (typeof data.curveColor === "string") this.curveColor = data.curveColor;
     if (typeof data.graphFillColor === "string") this.graphFillColor = data.graphFillColor;
     for (const field of ["playheadColor", "graphColor", "graphMaxSpeedColor"] as const) {
       if (data[field] && typeof data[field] === "object") {
@@ -106,8 +97,6 @@ class SettingsStore {
 
   reset() {
     this.autoApply = DEFAULTS.autoApply;
-    this.defaultViewMode = DEFAULTS.defaultViewMode;
-    this.curveColor = DEFAULTS.curveColor;
     this.graphFillColor = DEFAULTS.graphFillColor;
     this.playheadColor = { ...DEFAULTS.playheadColor };
     this.graphColor = { ...DEFAULTS.graphColor };
