@@ -63,6 +63,43 @@
     `cubic-bezier(${(influenceIn / 100).toFixed(2)}, 0.00, ${(1 - influenceOut / 100).toFixed(2)}, 1.00)`
   );
 
+  let copyFeedback = $state(false);
+  let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
+  let pasteInputEl: HTMLInputElement;
+
+  function copyToClipboard(text: string) {
+    const el = document.createElement("textarea");
+    el.value = text;
+    el.style.position = "fixed";
+    el.style.opacity = "0";
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+  }
+
+  function copyBezier() {
+    copyToClipboard(bezierString);
+    copyFeedback = true;
+    if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer);
+    copyFeedbackTimer = setTimeout(() => { copyFeedback = false; }, 800);
+  }
+
+  function parseBezierString(str: string): { x1: number; x2: number } | null {
+    const m = str.match(/cubic-bezier\(\s*([\d.]+)\s*,\s*[\d.]+\s*,\s*([\d.]+)\s*,\s*[\d.]+\s*\)/);
+    if (!m) return null;
+    const x1 = parseFloat(m[1]);
+    const x2 = parseFloat(m[2]);
+    if (isNaN(x1) || isNaN(x2) || x1 < 0 || x1 > 1 || x2 < 0 || x2 > 1) return null;
+    return { x1, x2 };
+  }
+
+  function handlePaste(text: string) {
+    const parsed = parseBezierString(text.trim());
+    if (!parsed) return;
+    loadPreset({ x1: parsed.x1, y1: 0, x2: parsed.x2, y2: 1 });
+  }
+
   // --- Canvas dimensions (fill container width) ---
   let SIZE = $derived(containerWidth > 0 ? canvasWidth : 250);
   const PAD = 10;
@@ -616,6 +653,12 @@
     // mousemove and mouseup on window so drag continues outside canvas
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "c") { copyBezier(); }
+    };
+    window.addEventListener("keydown", onKeyDown);
+
     scheduleDraw();
     loadExistingEasing();
 
@@ -626,10 +669,12 @@
       canvasEl.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("keydown", onKeyDown);
       clearInterval(pollInterval);
       stopPlayheadPoll();
       if (drawRaf) cancelAnimationFrame(drawRaf);
       if (ghostFadeRaf) cancelAnimationFrame(ghostFadeRaf);
+      if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer);
     };
   });
 </script>
@@ -689,7 +734,17 @@
     </div>
   </div>
 
-  <span class="bezier-string">{bezierString}</span>
+  <div class="bezier-string-wrap"
+    onmouseenter={() => pasteInputEl?.focus()}
+    onmouseleave={() => pasteInputEl?.blur()}
+  >
+    <button class="bezier-string has-tip" data-tip="Click to copy, Cmd+V to paste" onclick={copyBezier}>{copyFeedback ? "Copied!" : bezierString}</button>
+    <input
+      bind:this={pasteInputEl}
+      class="paste-input"
+      onpaste={(e) => { const text = e.clipboardData?.getData("text/plain"); if (text) handlePaste(text); e.preventDefault(); }}
+    />
+  </div>
 
   <div class="apply-row">
     <label class="auto-apply-toggle">
@@ -856,11 +911,38 @@
     opacity: 1;
   }
 
+  .bezier-string-wrap {
+    position: relative;
+    width: 100%;
+  }
+
+  .paste-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    padding: 0;
+    border: none;
+    pointer-events: none;
+  }
+
   .bezier-string {
     font-family: monospace;
     font-size: 10px;
-    color: #666;
+    color: #888;
     text-align: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    width: 100%;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .bezier-string:hover {
+    color: #f5a623;
+    background: #333;
   }
 
   .apply-row {
@@ -901,10 +983,10 @@
     cursor: pointer;
     padding: 0;
     transition: color 0.15s;
+  }
 
-    &:hover {
-      color: #f5a623;
-    }
+  .gear-btn:hover {
+    color: #f5a623;
   }
 
   .apply-btn {
