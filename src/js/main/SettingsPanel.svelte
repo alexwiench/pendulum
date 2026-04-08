@@ -1,7 +1,6 @@
 <script lang="ts">
   import { settings } from "./settings.svelte";
   import { evalTS } from "../lib/utils/bolt";
-  import { hexToRgb } from "./curve-math";
 
   type RGBField = "playheadColor" | "graphColor" | "graphMaxSpeedColor";
 
@@ -18,18 +17,6 @@
       if (result === "cancelled") return;
       const [r, g, b] = (result as string).split(",").map(Number);
       settings[field] = { r, g, b };
-      settings.save();
-    } catch { /* picker unavailable outside AE */ }
-  }
-
-  async function openCurveColorPicker() {
-    const rgb = hexToRgb(settings.curveColor);
-    const r = rgb?.r ?? 245, g = rgb?.g ?? 166, b = rgb?.b ?? 35;
-    try {
-      const result = await evalTS("pickColor", r, g, b);
-      if (result === "cancelled") return;
-      const [nr, ng, nb] = (result as string).split(",").map(Number);
-      settings.curveColor = rgbToHex(nr, ng, nb);
       settings.save();
     } catch { /* picker unavailable outside AE */ }
   }
@@ -88,34 +75,11 @@
         />
         <span class="label-text">Auto-apply to selection</span>
       </label>
-      <div class="row">
-        <span class="label-text">Default view</span>
-        <div class="toggle-group">
-          <button
-            class="toggle-btn"
-            class:active={settings.defaultViewMode === "curve"}
-            onclick={() => saveAfter(() => settings.defaultViewMode = "curve")}
-          >Curve</button>
-          <button
-            class="toggle-btn"
-            class:active={settings.defaultViewMode === "graph"}
-            onclick={() => saveAfter(() => settings.defaultViewMode = "graph")}
-          >Graph</button>
-        </div>
-      </div>
     </div>
-
 
     <!-- Colors -->
     <div class="section">
       <div class="section-title">Colors</div>
-      <div class="row">
-        <span class="label-text">Curve</span>
-        <div class="color-pick-group">
-          <button class="color-swatch clickable" style="background-color: {settings.curveColor};" onclick={openCurveColorPicker}></button>
-          <span class="color-hex-label">{settings.curveColor}</span>
-        </div>
-      </div>
       <div class="row">
         <span class="label-text">Playhead</span>
         <div class="color-pick-group">
