@@ -4,8 +4,6 @@ const SETTINGS_VERSION = 1;
 const DEFAULTS = {
   autoApply: true,
   defaultViewMode: "graph" as "curve" | "graph",
-  canvasSize: 250,
-  canvasPadding: 20,
   curveColor: "#f5a623",
   graphFillColor: "rgba(74, 158, 255, 0.08)",
   playheadColor: { r: 74, g: 158, b: 255 },
@@ -22,8 +20,6 @@ const DEFAULTS = {
 class SettingsStore {
   autoApply = $state(DEFAULTS.autoApply);
   defaultViewMode: "curve" | "graph" = $state(DEFAULTS.defaultViewMode);
-  canvasSize = $state(DEFAULTS.canvasSize);
-  canvasPadding = $state(DEFAULTS.canvasPadding);
   curveColor = $state(DEFAULTS.curveColor);
   graphFillColor = $state(DEFAULTS.graphFillColor);
   playheadColor = $state({ ...DEFAULTS.playheadColor });
@@ -41,8 +37,6 @@ class SettingsStore {
       version: SETTINGS_VERSION,
       autoApply: this.autoApply,
       defaultViewMode: this.defaultViewMode,
-      canvasSize: this.canvasSize,
-      canvasPadding: this.canvasPadding,
       curveColor: this.curveColor,
       graphFillColor: this.graphFillColor,
       playheadColor: { ...this.playheadColor },
@@ -61,10 +55,6 @@ class SettingsStore {
     if (typeof data.autoApply === "boolean") this.autoApply = data.autoApply;
     if (data.defaultViewMode === "curve" || data.defaultViewMode === "graph")
       this.defaultViewMode = data.defaultViewMode;
-    if (typeof data.canvasSize === "number" && data.canvasSize >= 150 && data.canvasSize <= 400)
-      this.canvasSize = data.canvasSize;
-    if (typeof data.canvasPadding === "number" && data.canvasPadding >= 5 && data.canvasPadding <= 50)
-      this.canvasPadding = data.canvasPadding;
     if (typeof data.curveColor === "string") this.curveColor = data.curveColor;
     if (typeof data.graphFillColor === "string") this.graphFillColor = data.graphFillColor;
     for (const field of ["playheadColor", "graphColor", "graphMaxSpeedColor"] as const) {
@@ -122,8 +112,6 @@ class SettingsStore {
   reset() {
     this.autoApply = DEFAULTS.autoApply;
     this.defaultViewMode = DEFAULTS.defaultViewMode;
-    this.canvasSize = DEFAULTS.canvasSize;
-    this.canvasPadding = DEFAULTS.canvasPadding;
     this.curveColor = DEFAULTS.curveColor;
     this.graphFillColor = DEFAULTS.graphFillColor;
     this.playheadColor = { ...DEFAULTS.playheadColor };
