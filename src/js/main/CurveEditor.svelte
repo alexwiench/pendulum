@@ -56,12 +56,6 @@
   let playheadInterval: ReturnType<typeof setInterval> | null = null;
   let playheadPollPending = false;
 
-  // Smooth Y-axis scaling to avoid jarring jumps
-  let smoothMaxSpeed = 1;
-  let scaleAnimRaf: number | null = null;
-  let scaleAnimStart: number | null = null;
-  let scaleAnimFrom = 1;
-  let scaleAnimTo = 1;
   let drawRaf: number | null = null;
 
   let bezierString = $derived(
@@ -289,45 +283,14 @@
       computeSpeedGraph(g.x1, g.y1, g.x2, g.y2, 400)
     );
 
-    // Find target max speed across all curves for shared Y-axis scaling
+    // Scale Y-axis to the user's curve so it's always prominent
     let targetMaxSpeed = 0;
     for (const pt of points) {
       if (pt.speed > targetMaxSpeed) targetMaxSpeed = pt.speed;
     }
-    for (const gp of allGhostPoints) {
-      for (const pt of gp) {
-        if (pt.speed > targetMaxSpeed) targetMaxSpeed = pt.speed;
-      }
-    }
     if (targetMaxSpeed < 0.01) targetMaxSpeed = 1;
 
-    // Smoothly interpolate toward target scale with eased timing
-    if (Math.abs(scaleAnimTo - targetMaxSpeed) > 0.001) {
-      // Target changed — start a new animation from current position
-      scaleAnimFrom = smoothMaxSpeed;
-      scaleAnimTo = targetMaxSpeed;
-      scaleAnimStart = performance.now();
-    }
-    if (scaleAnimStart !== null) {
-      const elapsed = performance.now() - scaleAnimStart;
-      const duration = (1.05 - settings.scaleSmoothing) * 600; // smoothing 0.15 → ~540ms, 1.0 → ~30ms
-      const t = Math.min(elapsed / Math.max(duration, 1), 1);
-      // Fast-in ease-out curve: cubic-bezier(0.2, 0, 0, 1) approximation
-      const eased = 1 - Math.pow(1 - t, 3);
-      smoothMaxSpeed = scaleAnimFrom + (scaleAnimTo - scaleAnimFrom) * eased;
-      if (t < 1) {
-        if (scaleAnimRaf) cancelAnimationFrame(scaleAnimRaf);
-        scaleAnimRaf = requestAnimationFrame(() => {
-          scaleAnimRaf = null;
-          if (drawRaf) { cancelAnimationFrame(drawRaf); drawRaf = null; }
-          draw();
-        });
-      } else {
-        smoothMaxSpeed = scaleAnimTo;
-        scaleAnimStart = null;
-      }
-    }
-    const maxSpeed = smoothMaxSpeed;
+    const maxSpeed = targetMaxSpeed;
 
     const [startX, startY] = toCanvas(0, 0);
     const [endX, endY] = toCanvas(1, 0);
@@ -960,7 +923,6 @@
       clearInterval(pollInterval);
       stopPlayheadPoll();
       if (drawRaf) cancelAnimationFrame(drawRaf);
-      if (scaleAnimRaf) cancelAnimationFrame(scaleAnimRaf);
       if (ghostFadeRaf) cancelAnimationFrame(ghostFadeRaf);
     };
   });

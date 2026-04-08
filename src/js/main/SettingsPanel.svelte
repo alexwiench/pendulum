@@ -110,22 +110,6 @@
       </div>
     </div>
 
-    <!-- Canvas -->
-    <div class="section">
-      <div class="section-title">Canvas</div>
-      <div class="row slider-row">
-        <span class="label-text">Scale smoothing</span>
-        <input
-          type="range"
-          min="0.01"
-          max="1"
-          step="0.01"
-          value={settings.scaleSmoothing}
-          oninput={handleInput("scaleSmoothing")}
-        />
-        <span class="value">{settings.scaleSmoothing.toFixed(2)}</span>
-      </div>
-    </div>
 
     <!-- Colors -->
     <div class="section">
