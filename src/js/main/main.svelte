@@ -38,8 +38,3 @@
 </div>
 
 <SettingsPanel open={settingsOpen} onclose={() => settingsOpen = false} />
-
-<style lang="scss">
-  @use "../variables.scss" as *;
-
-</style>
