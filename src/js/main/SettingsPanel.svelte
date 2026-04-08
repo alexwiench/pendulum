@@ -288,7 +288,6 @@
   }
 
   .close-btn {
-    all: unset;
     cursor: pointer;
     color: #aaa;
     font-size: 14px;
@@ -375,7 +374,6 @@
   }
 
   .toggle-btn {
-    all: unset;
     cursor: pointer;
     padding: 3px 10px;
     font-size: 10px;
@@ -396,7 +394,6 @@
 
   /* Text / number inputs */
   .text-input {
-    all: unset;
     background: #333;
     color: #e0e0e0;
     border-radius: 3px;
@@ -414,7 +411,6 @@
   }
 
   .color-swatch {
-    all: unset;
     width: 20px;
     height: 20px;
     border-radius: 3px;
@@ -462,7 +458,6 @@
   }
 
   .action-btn {
-    all: unset;
     cursor: pointer;
     background: #333;
     color: #aaa;

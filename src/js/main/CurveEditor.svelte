@@ -1078,22 +1078,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #252525 !important;
+    background: #252525;
     border: none;
     border-radius: 3px;
     cursor: pointer;
     color: #888;
-    padding: 0 !important;
+    padding: 0;
     transition: color 0.15s, background 0.15s;
   }
 
   .side-grid-btn:hover {
     color: #f5a623;
-    background: #333 !important;
+    background: #333;
   }
 
   .side-grid-btn:active {
-    background: #2a2a2a !important;
+    background: #2a2a2a;
   }
 
   .presets {
@@ -1104,23 +1104,22 @@
   }
 
   .preset-btn {
-    all: unset;
     font-size: 10px;
-    padding: 3px 8px !important;
+    padding: 3px 8px;
     border-radius: 3px;
-    background: #252525 !important;
+    background: #252525;
     color: #aaa;
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
   }
 
   .preset-btn:hover {
-    background: #333 !important;
+    background: #333;
     color: #f5a623;
   }
 
   .preset-btn:active {
-    background: #2a2a2a !important;
+    background: #2a2a2a;
   }
 
   .bezier-string {
@@ -1155,11 +1154,10 @@
   }
 
   .apply-btn {
-    all: unset;
     flex: 1;
-    padding: 8px 0 !important;
+    padding: 8px 0;
     border-radius: 4px;
-    background: #f5a623 !important;
+    background: #f5a623;
     color: #1a1a1a;
     font-weight: 600;
     font-size: 12px;
@@ -1170,11 +1168,11 @@
   }
 
   .apply-btn:hover {
-    background: #ffb84d !important;
+    background: #ffb84d;
   }
 
   .apply-btn:active {
-    background: #e09520 !important;
+    background: #e09520;
   }
 
 </style>
