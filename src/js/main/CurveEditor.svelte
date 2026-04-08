@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { evalTS } from "../lib/utils/bolt";
+  import { settings } from "./settings.svelte";
 
   // --- State ---
   let p1 = $state({ x: 0.25, y: 0.0 });
@@ -9,7 +10,7 @@
   let hovering: "p1" | "p2" | null = $state(null);
   let graphDragStart: { normX: number; normY: number; infl: number; out: number } | null = $state(null);
   let graphDragging = $derived(graphDragStart !== null);
-  let viewMode: "curve" | "graph" = $state("graph");
+  let viewMode: "curve" | "graph" = $state(settings.defaultViewMode);
 
   let canvasEl: HTMLCanvasElement;
 
@@ -22,10 +23,10 @@
   let ghostCurves: GhostEasing[] = $state([]);
 
   const GHOST_COLORS = [
-    { r: 255, g: 255, b: 255, strokeA: 0.2, fillA: 0.03 },
-    { r: 255, g: 170, b: 100, strokeA: 0.2, fillA: 0.03 },
-    { r: 160, g: 220, b: 255, strokeA: 0.2, fillA: 0.03 },
-    { r: 200, g: 160, b: 255, strokeA: 0.2, fillA: 0.03 },
+    { r: 255, g: 255, b: 255 },
+    { r: 255, g: 170, b: 100 },
+    { r: 160, g: 220, b: 255 },
+    { r: 200, g: 160, b: 255 },
   ];
   let ghostOpacity = $state(0);
   let ghostFadeRaf: number | null = null;
@@ -39,6 +40,9 @@
   // Smooth Y-axis scaling to avoid jarring jumps
   let smoothMaxSpeed = 1;
   let scaleAnimRaf: number | null = null;
+  let scaleAnimStart: number | null = null;
+  let scaleAnimFrom = 1;
+  let scaleAnimTo = 1;
   let drawRaf: number | null = null;
 
   let bezierString = $derived(
@@ -47,10 +51,10 @@
       : `cubic-bezier(${p1.x.toFixed(2)}, ${p1.y.toFixed(2)}, ${p2.x.toFixed(2)}, ${p2.y.toFixed(2)})`
   );
 
-  // --- Constants ---
-  const SIZE = 250;
-  const PAD = 20;
-  const DRAW = SIZE - PAD * 2; // 210
+  // --- Canvas dimensions (reactive from settings) ---
+  let SIZE = $derived(settings.canvasSize);
+  let PAD = $derived(settings.canvasPadding);
+  let DRAW = $derived(SIZE - PAD * 2);
   const HIT_RADIUS = 12;
 
   // --- Presets ---
@@ -140,9 +144,11 @@
   function speedToColor(normalizedSpeed: number, totalFrames: number, alpha = 1): string {
     const frameDensity = totalFrames / Math.max(normalizedSpeed, 0.01);
     const t = Math.max(0, Math.min(1, 1 - (frameDensity - 3) / 5));
-    const r = Math.round(74 + (255 - 74) * t);
-    const g = Math.round(158 - (158 - 74) * t);
-    const b = Math.round(255 - (255 - 74) * t);
+    const lo = settings.graphColor;
+    const hi = settings.graphMaxSpeedColor;
+    const r = Math.round(lo.r + (hi.r - lo.r) * t);
+    const g = Math.round(lo.g + (hi.g - lo.g) * t);
+    const b = Math.round(lo.b + (hi.b - lo.b) * t);
     return alpha < 1 ? `rgba(${r}, ${g}, ${b}, ${alpha})` : `rgb(${r}, ${g}, ${b})`;
   }
 
@@ -225,7 +231,7 @@
     const [cx3, cy3] = toCanvas(1, 1);
 
     // Bezier curve
-    ctx.strokeStyle = "#f5a623";
+    ctx.strokeStyle = settings.curveColor;
     ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.moveTo(cx0, cy0);
@@ -274,18 +280,31 @@
     }
     if (targetMaxSpeed < 0.01) targetMaxSpeed = 1;
 
-    // Smoothly interpolate toward target scale
-    const scaleDiff = Math.abs(smoothMaxSpeed - targetMaxSpeed);
-    if (scaleDiff > 0.001) {
-      smoothMaxSpeed += (targetMaxSpeed - smoothMaxSpeed) * 0.15;
-      // Keep animating until settled
-      if (scaleAnimRaf) cancelAnimationFrame(scaleAnimRaf);
-      scaleAnimRaf = requestAnimationFrame(() => {
-        scaleAnimRaf = null;
-        scheduleDraw();
-      });
-    } else {
-      smoothMaxSpeed = targetMaxSpeed;
+    // Smoothly interpolate toward target scale with eased timing
+    if (Math.abs(scaleAnimTo - targetMaxSpeed) > 0.001) {
+      // Target changed — start a new animation from current position
+      scaleAnimFrom = smoothMaxSpeed;
+      scaleAnimTo = targetMaxSpeed;
+      scaleAnimStart = performance.now();
+    }
+    if (scaleAnimStart !== null) {
+      const elapsed = performance.now() - scaleAnimStart;
+      const duration = (1.05 - settings.scaleSmoothing) * 600; // smoothing 0.15 → ~540ms, 1.0 → ~30ms
+      const t = Math.min(elapsed / Math.max(duration, 1), 1);
+      // Fast-in ease-out curve: cubic-bezier(0.2, 0, 0, 1) approximation
+      const eased = 1 - Math.pow(1 - t, 3);
+      smoothMaxSpeed = scaleAnimFrom + (scaleAnimTo - scaleAnimFrom) * eased;
+      if (t < 1) {
+        if (scaleAnimRaf) cancelAnimationFrame(scaleAnimRaf);
+        scaleAnimRaf = requestAnimationFrame(() => {
+          scaleAnimRaf = null;
+          if (drawRaf) { cancelAnimationFrame(drawRaf); drawRaf = null; }
+          draw();
+        });
+      } else {
+        smoothMaxSpeed = scaleAnimTo;
+        scaleAnimStart = null;
+      }
     }
     const maxSpeed = smoothMaxSpeed;
 
@@ -304,7 +323,7 @@
         });
 
         // Ghost fill
-        ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.fillA * go})`;
+        ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${settings.ghostFillOpacity * go})`;
         ctx.beginPath();
         ctx.moveTo(startX, startY);
         for (const [cx, cy] of ghostCanvasPoints) {
@@ -315,7 +334,7 @@
         ctx.fill();
 
         // Ghost stroke
-        ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.strokeA * go})`;
+        ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${settings.ghostStrokeOpacity * go})`;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(ghostCanvasPoints[0][0], ghostCanvasPoints[0][1]);
@@ -335,7 +354,7 @@
     const totalFrames = ghostCurves.length > 0 ? ghostCurves[0].fps * ghostCurves[0].duration : Infinity;
 
     // Fill under curve
-    ctx.fillStyle = "rgba(74, 158, 255, 0.08)";
+    ctx.fillStyle = settings.graphFillColor;
     ctx.beginPath();
     ctx.moveTo(startX, startY);
     for (const [cx, cy] of canvasPoints) {
@@ -371,7 +390,8 @@
       const edgeDist = Math.min(clampedPh, 1 - clampedPh);
       const phOpacity = Math.min(1, edgeDist / 0.03);
       const [phX] = toCanvas(clampedPh, 0);
-      const phColor = `rgba(74, 158, 255, ${phOpacity})`;
+      const pc = settings.playheadColor;
+      const phColor = `rgba(${pc.r}, ${pc.g}, ${pc.b}, ${phOpacity})`;
 
       // Vertical line
       ctx.strokeStyle = phColor;
@@ -537,22 +557,28 @@
   }
 
   function onMouseUp() {
+    const wasDragging = graphDragging || dragging;
     if (graphDragging) {
       graphDragStart = null;
     }
     if (dragging) {
       dragging = null;
     }
+    if (settings.autoApply && wasDragging) {
+      handleApply();
+    }
   }
 
   function applyCurvePreset(preset: (typeof CURVE_PRESETS)[number]) {
     p1 = { ...preset.p1 };
     p2 = { ...preset.p2 };
+    if (settings.autoApply) handleApply();
   }
 
   function applyGraphPreset(preset: (typeof GRAPH_PRESETS)[number]) {
     influenceIn = preset.infl;
     influenceOut = preset.out;
+    if (settings.autoApply) handleApply();
   }
 
   function handleApply() {
@@ -593,6 +619,15 @@
     ghostCurves;
     ghostOpacity;
     playheadPos;
+    settings.canvasSize;
+    settings.canvasPadding;
+    settings.curveColor;
+    settings.graphFillColor;
+    settings.playheadColor;
+    settings.ghostStrokeOpacity;
+    settings.ghostFillOpacity;
+    settings.graphColor;
+    settings.graphMaxSpeedColor;
     scheduleDraw();
   });
 
@@ -611,7 +646,7 @@
     if (ghostFadeRaf) cancelAnimationFrame(ghostFadeRaf);
     ghostOpacity = 0;
     const start = performance.now();
-    const duration = 300;
+    const duration = settings.ghostFadeDuration;
     function tick() {
       const t = Math.min((performance.now() - start) / duration, 1);
       ghostOpacity = t;
@@ -685,7 +720,7 @@
 
   function startPlayheadPoll() {
     if (playheadInterval) return;
-    playheadInterval = setInterval(pollPlayhead, 100);
+    playheadInterval = setInterval(pollPlayhead, settings.playheadPollInterval);
   }
 
   function stopPlayheadPoll() {
@@ -740,8 +775,8 @@
     scheduleDraw();
     loadExistingEasing();
 
-    // Poll for keyframe selection changes (~1s interval)
-    const pollInterval = setInterval(loadExistingEasing, 1000);
+    // Poll for keyframe selection changes
+    const pollInterval = setInterval(loadExistingEasing, settings.selectionPollInterval);
 
     return () => {
       canvasEl.removeEventListener("mousedown", onMouseDown);
@@ -750,6 +785,8 @@
       clearInterval(pollInterval);
       stopPlayheadPoll();
       if (drawRaf) cancelAnimationFrame(drawRaf);
+      if (scaleAnimRaf) cancelAnimationFrame(scaleAnimRaf);
+      if (ghostFadeRaf) cancelAnimationFrame(ghostFadeRaf);
     };
   });
 </script>
@@ -835,7 +872,15 @@
 
   <span class="bezier-string">{bezierString}</span>
 
-  <button class="apply-btn" onclick={handleApply}>Apply</button>
+  <div class="apply-row">
+    <label class="auto-apply-toggle">
+      <input type="checkbox" checked={settings.autoApply} onchange={(e) => { settings.autoApply = (e.target as HTMLInputElement).checked; settings.save(); }} />
+      <span>Auto</span>
+    </label>
+    {#if !settings.autoApply}
+      <button class="apply-btn" onclick={handleApply}>Apply</button>
+    {/if}
+  </div>
 </div>
 
 <style lang="scss">
@@ -961,9 +1006,33 @@
     text-align: center;
   }
 
+  .apply-row {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+    align-items: center;
+  }
+
+  .auto-apply-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: #888;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .auto-apply-toggle input[type="checkbox"] {
+    accent-color: #f5a623;
+    margin: 0;
+    cursor: pointer;
+  }
+
   .apply-btn {
     all: unset;
-    width: 100%;
+    flex: 1;
     padding: 8px 0 !important;
     border-radius: 4px;
     background: #f5a623 !important;
