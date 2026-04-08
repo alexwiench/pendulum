@@ -1,9 +1,9 @@
-export function sampleBezier(t: number, v0: number, v1: number, v2: number, v3: number): number {
+function sampleBezier(t: number, v0: number, v1: number, v2: number, v3: number): number {
   const mt = 1 - t;
   return mt * mt * mt * v0 + 3 * mt * mt * t * v1 + 3 * mt * t * t * v2 + t * t * t * v3;
 }
 
-export function solveBezierT(targetX: number, x1: number, x2: number): number {
+function solveBezierT(targetX: number, x1: number, x2: number): number {
   let t = targetX;
   for (let i = 0; i < 8; i++) {
     const mt = 1 - t;
@@ -16,7 +16,7 @@ export function solveBezierT(targetX: number, x1: number, x2: number): number {
   return t;
 }
 
-export function bezierValue(time: number, x1: number, y1: number, x2: number, y2: number): number {
+function bezierValue(time: number, x1: number, y1: number, x2: number, y2: number): number {
   if (time <= 0) return 0;
   if (time >= 1) return 1;
   const t = solveBezierT(time, x1, x2);

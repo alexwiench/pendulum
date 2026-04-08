@@ -32,7 +32,7 @@
   let canvasEl: HTMLCanvasElement;
   let containerWidth = $state(0);
 
-  // Independent influence state for graph mode (0–100, default 50 = smooth ease)
+  // Influence state (0–100, default 50 = smooth ease)
   let influenceIn = $state(50.0);
   let influenceOut = $state(50.0);
 
