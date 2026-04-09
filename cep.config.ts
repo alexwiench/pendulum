@@ -52,7 +52,7 @@ const config: CEP_Config = {
     jsxBin: "off",
   },
   installModules: [],
-  copyAssets: [],
+  copyAssets: ["scripts"],
   copyZipAssets: [],
 };
 export default config;
