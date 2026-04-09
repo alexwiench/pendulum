@@ -1,6 +1,7 @@
 /**
  * @name Wiggle with Sliders
- * @tooltip Adds Frequency and Amplitude sliders with wiggle expression to Position
+ * @tooltip Add wiggle
+ * @color #4a9df8
  * @icon <svg viewBox="0 0 16 16" width="70%" height="70%" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8 Q4 4, 6 8 Q8 12, 10 8 Q12 4, 14 8"/></svg>
  */
 (function() {

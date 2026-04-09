@@ -46,11 +46,10 @@ export const getProjectDir = () => {
   }
 };
 
-export const getActiveComp = () => {
-  if (app.project.activeItem instanceof CompItem === false) {
-    app.activeViewer?.setActive();
-  }
-  return app.project.activeItem as CompItem;
+export const getActiveComp = (): CompItem | null => {
+  var item = app.project.activeItem;
+  if (item instanceof CompItem) return item;
+  return null;
 };
 
 // Project Item Helpers
