@@ -859,7 +859,7 @@
         <AnchorGrid />
       </div>
       {#each userScripts.scripts.slice(0, MAX_SHORTCUT_SLOTS) as script (script.filePath)}
-        <button class="side-grid-cell side-grid-btn has-tip" data-tip={script.tooltip} onclick={() => userScripts.execute(script)}>
+        <button class="side-grid-cell side-grid-btn has-tip" data-tip={script.tooltip} style={script.color ? `color: ${script.color};` : ''} onclick={() => userScripts.execute(script)}>
           {@html script.icon}
         </button>
       {/each}
@@ -1015,7 +1015,7 @@
     onmouseenter={() => pasteInputEl?.focus()}
     onmouseleave={() => pasteInputEl?.blur()}
   >
-    <button class="bezier-string has-tip" data-tip="Click to copy, Cmd+V to paste" onclick={copyBezier}>{copyFeedback ? "Copied!" : bezierString}</button>
+    <button class="bezier-string has-tip" data-tip="Copy curve" onclick={copyBezier}>{copyFeedback ? "Copied!" : bezierString}</button>
     <input
       bind:this={pasteInputEl}
       class="paste-input"

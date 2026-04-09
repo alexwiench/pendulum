@@ -7,6 +7,7 @@ export type UserScript = {
   name: string;
   tooltip: string;
   icon: string;
+  color: string;
 };
 
 const DEFAULT_ICON = `<svg viewBox="0 0 16 16" width="70%" height="70%" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 3 L10 3 L12 5 L12 13 L4 13 Z"/><line x1="6" y1="7" x2="10" y2="7"/><line x1="6" y1="9.5" x2="10" y2="9.5"/></svg>`;
@@ -19,8 +20,8 @@ function humanizeName(fileName: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function parseMetadata(filePath: string): { name: string; tooltip: string; icon: string } {
-  const result = { name: "", tooltip: "", icon: "" };
+function parseMetadata(filePath: string): { name: string; tooltip: string; icon: string; color: string } {
+  const result = { name: "", tooltip: "", icon: "", color: "" };
   try {
     const content = fs.readFileSync(filePath, { encoding: "utf-8" });
     const blockMatch = content.match(/\/\*\*([\s\S]*?)\*\//);
@@ -31,9 +32,7 @@ function parseMetadata(filePath: string): { name: string; tooltip: string; icon:
       const tagMatch = line.match(/@(\w+)\s+(.+)/);
       if (tagMatch) {
         const [, key, value] = tagMatch;
-        if (key === "name") result.name = value.trim();
-        else if (key === "tooltip") result.tooltip = value.trim();
-        else if (key === "icon") result.icon = value.trim();
+        if (key in result) result[key as keyof typeof result] = value.trim();
       }
     }
   } catch {}
@@ -63,6 +62,7 @@ class UserScriptStore {
           name,
           tooltip: meta.tooltip || name,
           icon: meta.icon || DEFAULT_ICON,
+          color: meta.color || "",
         };
       });
     } catch {

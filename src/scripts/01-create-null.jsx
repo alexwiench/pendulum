@@ -1,6 +1,7 @@
 /**
  * @name Create Null
- * @tooltip Creates a null at the center of selected layers and parents them
+ * @tooltip Create null
+ * @color #f5a623
  * @icon <svg viewBox="0 0 16 16" width="70%" height="70%" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="10" height="10" stroke-dasharray="3,4" /><line x1="8" y1="5.5" x2="8" y2="10.5" /><line x1="5.5" y1="8" x2="10.5" y2="8" /></svg>
  */
 (function() {
@@ -22,6 +23,15 @@
     app.beginUndoGroup("Pendulum: Create Null");
 
     var nullLayer = comp.layers.addNull();
+
+    if (selected.length > 0) {
+        var topIndex = selected[0].index;
+        for (var i = 1; i < selected.length; i++) {
+            if (selected[i].index < topIndex) topIndex = selected[i].index;
+        }
+        nullLayer.moveBefore(comp.layers[topIndex + 1]);
+    }
+
     nullLayer.name = getNextCtrlName(comp);
     nullLayer.anchorPoint.setValue([50, 50]);
 
