@@ -6,7 +6,7 @@ A CEP panel for After Effects built on **Bolt CEP** that provides:
 
 1. **Bezier Easing Editor** — Visual curve editor to create and apply easing to selected keyframes (single or batch)
 2. **Anchor Point Mover** — 9-point grid to reposition layer anchor points without shifting the layer
-3. **Null Object Creator** — One-click null creation, optionally parented to selected layers
+3. **Scripts** — Drop-in `.jsx` utilities that appear as buttons in the side grid (e.g. null creator, wiggle with sliders)
 
 ---
 
@@ -15,7 +15,7 @@ A CEP panel for After Effects built on **Bolt CEP** that provides:
 | Layer | Technology | Why |
 |---|---|---|
 | Scaffold / Build | **Bolt CEP** (Vite-based) | HMR in dev, ExtendScript transpiling, ZXP signing, dual CEP/UXP target |
-| Panel UI | Vanilla JS + `<canvas>` | No UI framework needed — the panel is compact and canvas-heavy |
+| Panel UI | **Svelte 5** + `<canvas>` | Runes-based reactivity, compact components |
 | AE Scripting | ExtendScript (.jsx) | Full keyframe velocity/influence API access |
 | Canvas | HTML `<canvas>` | Bezier curve editor with draggable control handles |
 
@@ -27,9 +27,9 @@ A CEP panel for After Effects built on **Bolt CEP** that provides:
 - **CEP + UXP dual target** — future-proofs us for when Adobe matures UXP in AE
 - **Vite under the hood** — fast builds, native ES module dev server
 
-### Why no UI framework?
+### Why Svelte 5?
 
-The UI is a canvas curve editor, a 3×3 button grid, and a toolbar. Vanilla JS is simpler, faster, and one less abstraction between us and the `<canvas>` API. Bolt CEP supports React/Svelte/Vue if we change our minds later.
+Lightweight reactive components with runes (`$state`, `$derived`). The panel is compact — mostly a canvas editor, a button grid, and a few stores — so Svelte's small runtime and compile-time approach is a good fit.
 
 ---
 
@@ -40,33 +40,35 @@ Bolt CEP generates this scaffold. We customize from here:
 ```
 pendulum/
 ├── src/
-│   ├── js/                         # Panel UI (Vite entry)
-│   │   ├── main.ts                 # Entry point, UI wiring
-│   │   ├── curve-editor/
-│   │   │   ├── canvas.ts           # Canvas rendering — bezier curve, grid, handles
-│   │   │   ├── interaction.ts      # Drag logic for control points
-│   │   │   ├── presets.ts          # Named ease presets (ease-in, overshoot, etc.)
-│   │   │   └── conversion.ts      # Bezier ↔ AE KeyframeEase conversion (critical)
-│   │   ├── anchor-mover/
-│   │   │   └── grid.ts            # 9-point grid UI + click handlers
-│   │   ├── null-creator/
-│   │   │   └── button.ts          # Null creation button logic
-│   │   └── bridge.ts              # Typed wrapper around CSInterface.evalScript
-│   ├── jsx/                        # ExtendScript (transpiled by Bolt)
-│   │   ├── index.ts                # Dispatcher — routes calls from panel
-│   │   ├── easing.ts               # Apply easing to selected keyframes
-│   │   ├── anchor.ts               # Move anchor point + compensate position
-│   │   └── nulls.ts                # Create and parent null objects
-│   └── index.html                  # Panel HTML shell
-├── public/
-│   └── icons/                      # Panel icons for AE
-├── cep.config.ts                   # Bolt CEP config (extension ID, AE version range, etc.)
+│   ├── js/                         # Panel UI (Svelte 5 + Vite)
+│   │   ├── main/
+│   │   │   ├── main.svelte         # Root component
+│   │   │   ├── CurveEditor.svelte  # Canvas bezier editor + side grid
+│   │   │   ├── AnchorGrid.svelte   # 9-point anchor mover
+│   │   │   ├── SettingsPanel.svelte # Settings overlay
+│   │   │   ├── settings.svelte.ts  # Settings store (localStorage)
+│   │   │   ├── presets.svelte.ts   # Preset store
+│   │   │   ├── user-scripts.svelte.ts # Script discovery & execution
+│   │   │   └── curve-math.ts       # Speed graph computation
+│   │   └── lib/
+│   │       ├── utils/bolt.ts       # evalTS/evalES/evalFile bridge to ExtendScript
+│   │       └── cep/node.ts         # Node.js module access (fs, path, os)
+│   ├── jsx/                        # ExtendScript (transpiled by Bolt to ES3)
+│   │   ├── index.ts                # Dispatcher — registers functions under namespace
+│   │   ├── aeft/easing.ts          # Apply easing to selected keyframes
+│   │   ├── aeft/anchor.ts          # Move anchor point + compensate position
+│   │   └── aeft/aeft-utils.ts      # Shared AE helpers
+│   ├── scripts/                    # User scripts (.jsx) — copied to dist at build
+│   │   ├── 01-create-null.jsx      # Null creator with auto-parenting
+│   │   └── 02-wiggle-with-sliders.jsx # Wiggle expression with slider controls
+│   └── shared/shared.ts            # Namespace, version exports
+├── cep.config.ts                   # Bolt CEP config (extension ID, hosts, copyAssets)
 ├── package.json
 ├── tsconfig.json
 └── vite.config.ts
 ```
 
-> **Note:** Bolt CEP lets us write `.ts` in the `jsx/` folder — it transpiles to ExtendScript-compatible ES3. We get modern syntax and type safety for the AE scripting layer.
+> **Note:** Bolt CEP lets us write `.ts` in the `jsx/` folder — it transpiles to ExtendScript-compatible ES3. Scripts in `src/scripts/` are raw `.jsx` files that run as-is via `$.evalFile()` — they are NOT transpiled.
 
 ---
 
@@ -138,15 +140,74 @@ BL  BC  BR
    // For parented layers: account for parent transform chain
 ```
 
-### 3. Null Object Creator
+### 3. Scripts
 
-**UI:** Single icon button in the bottom toolbar.
+Standalone `.jsx` ExtendScript files that appear as icon buttons in the side grid next to the bezier editor. Scripts are standard AE ExtendScript — the same format as File > Scripts > Run Script File.
 
-**Behavior:**
-- Click → creates a null object in the active comp
-- If layers are selected: null is positioned at the average center of selected layers, and those layers are parented to it
-- Auto-naming: `Ctrl_01`, `Ctrl_02`, etc.
-- All operations wrapped in a single undo group
+**Location:** `src/scripts/` — copied to `dist/cep/scripts/` at build via `copyAssets` in `cep.config.ts`.
+
+**Execution:** Loaded at runtime via `$.evalFile()`. Not compiled or transpiled — must be valid ES3.
+
+**Discovery:** On panel mount, the store scans `<extension_root>/scripts/` for `.jsx` files, parses metadata from the first `/** */` block comment, and renders buttons sorted by filename.
+
+**Filename prefix controls sort order:** `01-create-null.jsx` appears before `02-wiggle-with-sliders.jsx`.
+
+#### Script metadata format
+
+Metadata is declared in a JSDoc-style `/** */` block comment at the top of the file using `@tag` fields. All fields are optional.
+
+```jsx
+/**
+ * @name Create Null
+ * @tooltip Creates a null at the center of selected layers
+ * @icon <svg viewBox="0 0 16 16" width="70%" height="70%" fill="none" stroke="currentColor" stroke-width="1.5">...</svg>
+ * @author John Doe
+ * @version 1.0.0
+ * @url https://example.com
+ * @ae 24.0
+ */
+```
+
+| Field | Purpose | Fallback |
+|---|---|---|
+| `@name` | Display name | Humanized filename (strips prefix, replaces `-` with spaces, title-cased) |
+| `@tooltip` | Hover text on the button | Falls back to `@name` |
+| `@icon` | Inline SVG for the button | Generic document icon |
+| `@author` | Script author | — |
+| `@version` | Version string | — |
+| `@url` | Link to source or docs | — |
+| `@ae` | Minimum AE version | — |
+
+> **Note:** `@tags` must be inside a `/** */` block comment, not `//` line comments. ExtendScript treats `//@` in line comments as preprocessor directives, but `@` inside block comments is safe.
+
+#### Script template
+
+```jsx
+/**
+ * @name My Script
+ * @tooltip What it does in a few words
+ * @icon <svg viewBox="0 0 16 16" width="70%" height="70%" fill="none" stroke="currentColor" stroke-width="1.5">...</svg>
+ */
+(function() {
+    var comp = app.project.activeItem;
+    if (!(comp instanceof CompItem)) {
+        alert("Open a composition first.");
+        return;
+    }
+
+    app.beginUndoGroup("Pendulum: My Script");
+
+    // ... AE scripting API calls ...
+
+    app.endUndoGroup();
+})();
+```
+
+**Conventions:**
+- Wrap in an IIFE to avoid polluting the global scope
+- Use `var` — no `let`, `const`, arrow functions, or template literals (ES3 only)
+- Wrap operations in `app.beginUndoGroup()` / `app.endUndoGroup()`
+- Validate comp and selection before acting; use `alert()` for user-facing errors
 
 ---
 

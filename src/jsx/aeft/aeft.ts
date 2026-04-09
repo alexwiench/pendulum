@@ -1,5 +1,4 @@
 import { moveAnchorPoint } from "./anchor";
-import { createNull } from "./nulls";
 import { applyBezierEasing, getSelectedKeyframeEasing, getCompTime } from "./easing";
 
 export const pickColor = (r: number, g: number, b: number): string => {
@@ -12,4 +11,4 @@ export const pickColor = (r: number, g: number, b: number): string => {
   return ro + "," + go + "," + bo;
 };
 
-export { moveAnchorPoint, createNull, applyBezierEasing, getSelectedKeyframeEasing, getCompTime };
+export { moveAnchorPoint, applyBezierEasing, getSelectedKeyframeEasing, getCompTime };

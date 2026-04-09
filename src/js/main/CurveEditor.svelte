@@ -8,6 +8,7 @@
   import { computeSpeedGraph, findPeakTime } from "./curve-math";
   import AnchorGrid from "./AnchorGrid.svelte";
   import PresetThumbnail from "./PresetThumbnail.svelte";
+  import { userScripts } from "./user-scripts.svelte";
 
   let { onOpenSettings }: { onOpenSettings: () => void } = $props();
 
@@ -24,6 +25,8 @@
   const ROW_GAP = 4;
   let gridCellSize = $derived(Math.floor((containerWidth - (GRID_COLS + GRID_ROWS - 2) * GRID_GAP - ROW_GAP) / (GRID_COLS + GRID_ROWS)));
   let canvasWidth = $derived(gridCellSize * GRID_ROWS + GRID_GAP * (GRID_ROWS - 1));
+
+  const MAX_SHORTCUT_SLOTS = GRID_COLS * (GRID_ROWS - 2);
 
   let canvasEl: HTMLCanvasElement;
   let containerWidth = $state(0);
@@ -825,6 +828,7 @@
 
     scheduleDraw();
     loadExistingEasing();
+    userScripts.scan();
 
     // Poll for keyframe selection changes
     const pollInterval = setInterval(loadExistingEasing, settings.selectionPollInterval);
@@ -854,14 +858,12 @@
       <div class="side-grid-anchor">
         <AnchorGrid />
       </div>
-      <button class="side-grid-cell side-grid-btn has-tip" data-tip="Create Null" onclick={() => evalTS("createNull")}>
-        <svg viewBox="0 0 16 16" width="70%" height="70%" fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="3" y="3" width="10" height="10" stroke-dasharray="3,4" />
-          <line x1="8" y1="5.5" x2="8" y2="10.5" />
-          <line x1="5.5" y1="8" x2="10.5" y2="8" />
-        </svg>
-      </button>
-      {#each Array(GRID_COLS * (GRID_ROWS - 2) - 1) as _, i}
+      {#each userScripts.scripts.slice(0, MAX_SHORTCUT_SLOTS) as script (script.filePath)}
+        <button class="side-grid-cell side-grid-btn has-tip" data-tip={script.tooltip} onclick={() => userScripts.execute(script)}>
+          {@html script.icon}
+        </button>
+      {/each}
+      {#each Array(Math.max(0, MAX_SHORTCUT_SLOTS - userScripts.scripts.length)) as _}
         <div class="side-grid-cell"></div>
       {/each}
     </div>
