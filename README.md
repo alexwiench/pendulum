@@ -2,6 +2,8 @@
 
 A visual easing editor panel for Adobe After Effects. Shape keyframe easing by dragging curves on a speed graph instead of tweaking influence values numerically.
 
+![Pendulum panel](screenshot.png)
+
 ## Install
 
 1. Download `com.pendulum.cep.zxp` from the [latest release](../../releases/latest).
