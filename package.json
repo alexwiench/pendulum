@@ -55,5 +55,5 @@
     "vite-cep-plugin": "^2.2.0"
   },
   "main": "index.js",
-  "license": "MIT"
+  "license": "GPL-3.0-only"
 }
