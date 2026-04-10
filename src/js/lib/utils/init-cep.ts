@@ -1,12 +1,14 @@
 import { company, displayName, version } from "../../../shared/shared";
 import { dispatchTS, openLinkInBrowser } from "./bolt";
 import { keyRegisterOverride, dropDisable } from "./cep";
+import { updater } from "../../main/updater.svelte";
 
 const buildFlyoutMenu = () => {
   const menu = `<Menu>
   <MenuItem Id="info" Label="${displayName} ${version}" Enabled="false" Checked="false"/>
   <MenuItem Id="website" Label="by ${company}" Enabled="false" Checked="false"/>
   <MenuItem Label="---" />
+  <MenuItem Id="checkUpdates" Label="Check for Updates" Enabled="true" Checked="false"/>
   <MenuItem Id="refresh" Label="Refresh" Enabled="true" Checked="false"/>
   </Menu>`;
 
@@ -35,6 +37,8 @@ const buildFlyoutMenu = () => {
       // openLinkInBrowser(homePage);
     } else if (menuId === "info") {
       // openLinkInBrowser(productPage);
+    } else if (menuId === "checkUpdates") {
+      updater.checkForUpdates(true);
     } else if (menuId === "refresh") {
       location.reload();
     }
