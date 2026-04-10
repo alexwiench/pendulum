@@ -1,8 +1,11 @@
 import { CEP_Config } from "vite-cep-plugin";
 import { version } from "./package.json";
 
+// CEP manifests only accept numeric major.minor.patch versions
+const manifestVersion = version.replace(/-.*$/, "");
+
 const config: CEP_Config = {
-  version,
+  version: manifestVersion,
   id: "com.pendulum.cep",
   displayName: "Pendulum",
   symlink: "local",
