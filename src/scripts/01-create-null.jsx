@@ -25,11 +25,11 @@
     var nullLayer = comp.layers.addNull();
 
     if (selected.length > 0) {
-        var topIndex = selected[0].index;
+        var topLayer = selected[0];
         for (var i = 1; i < selected.length; i++) {
-            if (selected[i].index < topIndex) topIndex = selected[i].index;
+            if (selected[i].index < topLayer.index) topLayer = selected[i];
         }
-        nullLayer.moveBefore(comp.layers[topIndex + 1]);
+        nullLayer.moveBefore(topLayer);
     }
 
     nullLayer.name = getNextCtrlName(comp);

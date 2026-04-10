@@ -17,41 +17,46 @@
 
     var layers = comp.selectedLayers;
     if (layers.length < 2) {
-        alert("Select at least two layers (first = reference).");
+        alert("Select at least two layers.");
         return;
     }
 
-    var refLayer = layers[0];
-    var refRect = refLayer.sourceRectAtTime(comp.time, false);
-    if (!refRect || refRect.width === 0 || refRect.height === 0) {
-        alert("Reference layer has no visible bounds.");
-        return;
-    }
-
-    app.beginUndoGroup("Pendulum: Match Size");
-
-    var refScale = refLayer.scale.value;
-    var refW = refRect.width * (refScale[0] / 100);
-    var refH = refRect.height * (refScale[1] / 100);
-
-    for (var i = 1; i < layers.length; i++) {
+    // Pass 1: measure each selected layer's rendered width/height and sum.
+    var items = [];
+    var totalW = 0;
+    var totalH = 0;
+    for (var i = 0; i < layers.length; i++) {
         var layer = layers[i];
         var rect = layer.sourceRectAtTime(comp.time, false);
         if (!rect || rect.width === 0 || rect.height === 0) continue;
+        var scale = layer.scale.value;
+        var w = rect.width * (scale[0] / 100);
+        var h = rect.height * (scale[1] / 100);
+        items.push({ layer: layer, w: w, h: h, scale: scale });
+        totalW += w;
+        totalH += h;
+    }
 
-        var curScale = layer.scale.value;
-        var curW = rect.width * (curScale[0] / 100);
-        var curH = rect.height * (curScale[1] / 100);
+    if (items.length < 2) {
+        alert("Select at least two layers with visible bounds.");
+        return;
+    }
 
-        var ratio = Math.min(refW / curW, refH / curH);
+    var avgW = totalW / items.length;
+    var avgH = totalH / items.length;
 
-        var newX = curScale[0] * ratio;
-        var newY = curScale[1] * ratio;
+    app.beginUndoGroup("Pendulum: Match Size");
 
-        if (curScale.length === 3) {
-            layer.scale.setValue([newX, newY, curScale[2]]);
+    // Pass 2: resize every layer toward the average using min-ratio to preserve aspect.
+    for (var k = 0; k < items.length; k++) {
+        var it = items[k];
+        var ratio = Math.min(avgW / it.w, avgH / it.h);
+        var newX = it.scale[0] * ratio;
+        var newY = it.scale[1] * ratio;
+        if (it.scale.length === 3) {
+            it.layer.scale.setValue([newX, newY, it.scale[2]]);
         } else {
-            layer.scale.setValue([newX, newY]);
+            it.layer.scale.setValue([newX, newY]);
         }
     }
 

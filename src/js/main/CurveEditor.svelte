@@ -57,6 +57,7 @@
   let dragActive = $state(false);
   let dragOverFavorites = $state(false);
   let favoritesRowEl: HTMLDivElement = $state(null!);
+  let presetsScrollEl: HTMLDivElement = $state(null!);
   let clickSuppressed = $state(false);
 
   // --- Favorites UI state ---
@@ -826,6 +827,13 @@
     };
     window.addEventListener("keydown", onKeyDown);
 
+    const onPresetsWheel = (e: WheelEvent) => {
+      if (e.deltaY === 0) return;
+      e.preventDefault();
+      presetsScrollEl.scrollLeft += e.deltaY;
+    };
+    presetsScrollEl.addEventListener("wheel", onPresetsWheel, { passive: false });
+
     scheduleDraw();
     loadExistingEasing();
     userScripts.scan();
@@ -838,6 +846,7 @@
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
       window.removeEventListener("keydown", onKeyDown);
+      presetsScrollEl.removeEventListener("wheel", onPresetsWheel);
       clearInterval(pollInterval);
       stopPlayheadPoll();
       if (drawRaf) cancelAnimationFrame(drawRaf);
@@ -889,7 +898,7 @@
         </svg>
       </button>
     {/if}
-    <div class="presets-scroll">
+    <div class="presets-scroll" bind:this={presetsScrollEl}>
       {#each presets.items as preset (preset.id)}
         <div class="preset-slot" animate:flip={{ duration: 250 }} onmousedown={(e) => startPresetDrag(preset, e)}>
           <PresetThumbnail
