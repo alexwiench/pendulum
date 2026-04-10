@@ -17,30 +17,54 @@
         return;
     }
 
-    app.beginUndoGroup("Pendulum: Wiggle with Sliders");
+    var FREQ_NAME = "Frequency";
+    var AMP_NAME = "Amplitude";
+    var EXPR = 'wiggle(effect("' + FREQ_NAME + '")("Slider"), effect("' + AMP_NAME + '")("Slider"))';
 
+    function isWiggleable(prop) {
+        if (!prop || prop.propertyType !== PropertyType.PROPERTY) return false;
+        if (!prop.canSetExpression) return false;
+        var t = prop.propertyValueType;
+        return t === PropertyValueType.OneD
+            || t === PropertyValueType.TwoD
+            || t === PropertyValueType.TwoD_SPATIAL
+            || t === PropertyValueType.ThreeD
+            || t === PropertyValueType.ThreeD_SPATIAL
+            || t === PropertyValueType.COLOR;
+    }
+
+    // Collect eligible selected properties per layer before mutating anything.
+    var targets = []; // { layer, props: [Property, ...] }
     for (var i = 0; i < layers.length; i++) {
         var layer = layers[i];
+        var selProps = layer.selectedProperties;
+        var eligible = [];
+        for (var j = 0; j < selProps.length; j++) {
+            if (isWiggleable(selProps[j])) eligible.push(selProps[j]);
+        }
+        if (eligible.length > 0) targets.push({ layer: layer, props: eligible });
+    }
 
-        var freqEffect = layer.Effects.addProperty("ADBE Slider Control");
-        freqEffect.name = "Frequency";
+    if (targets.length === 0) {
+        alert("Select a property in the timeline first.");
+        return;
+    }
+
+    app.beginUndoGroup("Pendulum: Wiggle with Sliders");
+
+    for (var k = 0; k < targets.length; k++) {
+        var t = targets[k];
+
+        var freqEffect = t.layer.Effects.addProperty("ADBE Slider Control");
+        freqEffect.name = FREQ_NAME;
         freqEffect.property("Slider").setValue(3);
 
-        var ampEffect = layer.Effects.addProperty("ADBE Slider Control");
-        ampEffect.name = "Amplitude";
+        var ampEffect = t.layer.Effects.addProperty("ADBE Slider Control");
+        ampEffect.name = AMP_NAME;
         ampEffect.property("Slider").setValue(50);
 
-        var transform = layer.property("ADBE Transform Group");
-        var pos = transform.property("Position");
-        var expr = 'wiggle(effect("Frequency")("Slider"), effect("Amplitude")("Slider"))';
-        if (pos.dimensionsSeparated) {
-            transform.property("ADBE Position_0").expression = expr;
-            transform.property("ADBE Position_1").expression = expr;
-            if (layer.threeDLayer) {
-                transform.property("ADBE Position_2").expression = expr;
-            }
-        } else {
-            pos.expression = expr;
+        for (var p = 0; p < t.props.length; p++) {
+            t.props[p].expression = EXPR;
         }
     }
 
