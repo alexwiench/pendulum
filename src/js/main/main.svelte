@@ -21,6 +21,10 @@
       subscribeBackgroundColor((c: string) => (backgroundColor = c));
       updater.checkForUpdates();
     }
+    return () => {
+      presets.save.flush();
+      settings.save.flush();
+    };
   });
 </script>
 

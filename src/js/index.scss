@@ -7,6 +7,11 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  // Tooltips (.has-tip::after) can briefly extend past the viewport edges
+  // when hovered on edge buttons, which would otherwise trigger a horizontal
+  // scrollbar on the panel root. Clip it — the panel is always content-sized
+  // to its width, so horizontal scroll is never legitimate here.
+  overflow-x: hidden;
 }
 
 .app {

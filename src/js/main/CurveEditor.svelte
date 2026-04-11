@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { flip } from "svelte/animate";
   import { slide } from "svelte/transition";
-  import { evalTS } from "../lib/utils/bolt";
+  import { debounce, evalTS } from "../lib/utils/bolt";
   import { settings } from "./settings.svelte";
   import { presets } from "./presets.svelte";
   import { computeSpeedGraph, findPeakTime } from "./curve-math";
@@ -232,7 +232,7 @@
   );
 
   let copyFeedback = $state(false);
-  let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
+  const resetCopyFeedback = debounce(() => { copyFeedback = false; }, 800);
   let pasteInputEl: HTMLInputElement;
 
   function copyToClipboard(text: string) {
@@ -249,8 +249,7 @@
   function copyBezier() {
     copyToClipboard(bezierString);
     copyFeedback = true;
-    if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer);
-    copyFeedbackTimer = setTimeout(() => { copyFeedback = false; }, 800);
+    resetCopyFeedback();
   }
 
   function parseBezierString(str: string): { x1: number; x2: number } | null {
@@ -276,6 +275,7 @@
 
   // --- Preset thumbnail size ---
   const PRESET_SIZE = 28;
+  const FAVORITE_SLOT_EXTRA = 20;
 
   // --- Coordinate mapping ---
   function toCanvas(nx: number, ny: number): [number, number] {
@@ -851,7 +851,7 @@
       stopPlayheadPoll();
       if (drawRaf) cancelAnimationFrame(drawRaf);
       if (ghostFadeRaf) cancelAnimationFrame(ghostFadeRaf);
-      if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer);
+      resetCopyFeedback.cancel();
     };
   });
 </script>
@@ -930,7 +930,7 @@
       <div
         class="favorites-grid"
         class:expanded={favoritesExpanded}
-        style="--collapsed-rows: {FAVORITES_COLLAPSED_ROWS}; --item-size: {PRESET_SIZE + 20}px;"
+        style="--collapsed-rows: {FAVORITES_COLLAPSED_ROWS}; --item-size: {PRESET_SIZE + FAVORITE_SLOT_EXTRA}px;"
       >
         {#if dragActive}
           <div class="favorite-slot favorite-drop-placeholder">
@@ -998,7 +998,7 @@
         {/each}
       </div>
       {#if settings.favorites.length > 0}
-        {@const itemsPerRow = Math.max(1, Math.floor((containerWidth + 2) / (PRESET_SIZE + 20 + 2)))}
+        {@const itemsPerRow = Math.max(1, Math.floor((containerWidth + 2) / (PRESET_SIZE + FAVORITE_SLOT_EXTRA + 2)))}
         {@const totalRows = Math.ceil(settings.favorites.length / itemsPerRow)}
         {#if totalRows > FAVORITES_COLLAPSED_ROWS}
           <button class="favorites-expand-btn" onclick={() => { favoritesExpanded = !favoritesExpanded; }}>
