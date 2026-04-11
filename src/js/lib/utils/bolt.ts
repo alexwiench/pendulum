@@ -216,6 +216,56 @@ export const initBolt = (log = true) => {
 
 export const posix = (str: string) => str.replace(/\\/g, "/");
 
+type Debounced<Args extends unknown[]> = ((...args: Args) => void) & {
+  flush: () => void;
+  cancel: () => void;
+};
+
+/**
+ * Returns a debounced wrapper around `fn` that delays invocation until `ms`
+ * milliseconds have passed without further calls. Each new call resets the
+ * timer with the most recent arguments. The wrapper exposes:
+ * - `.flush()` — run the pending call immediately (no-op if none pending)
+ * - `.cancel()` — discard any pending call
+ */
+export function debounce<Args extends unknown[]>(
+  fn: (...args: Args) => void,
+  ms: number,
+): Debounced<Args> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let lastArgs: Args | null = null;
+
+  const debounced = ((...args: Args) => {
+    lastArgs = args;
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      const a = lastArgs!;
+      lastArgs = null;
+      fn(...a);
+    }, ms);
+  }) as Debounced<Args>;
+
+  debounced.flush = () => {
+    if (timer === null) return;
+    clearTimeout(timer);
+    timer = null;
+    const a = lastArgs!;
+    lastArgs = null;
+    fn(...a);
+  };
+
+  debounced.cancel = () => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    lastArgs = null;
+  };
+
+  return debounced;
+}
+
 export const openLinkInBrowser = (url: string) => {
   if (window.cep) {
     csi.openURLInDefaultBrowser(url);
@@ -296,6 +346,11 @@ export const isAppRunning = (targetSpecifier: string) => {
 interface IOpenDialogResult {
   data: string[];
 }
+
+// CEP file dialogs return `file://`-prefixed, URI-encoded paths.
+const normalizeCepPath = (rawPath: string): string =>
+  decodeURIComponent(rawPath.replace(/^file:\/\//, ""));
+
 export const selectFolder = (
   dir: string,
   msg: string,
@@ -305,8 +360,7 @@ export const selectFolder = (
     window.cep.fs.showOpenDialogEx || window.cep.fs.showOpenDialog
   )(false, true, msg, dir) as IOpenDialogResult;
   if (result.data?.length > 0) {
-    const folder = decodeURIComponent(result.data[0].replace("file://", ""));
-    callback(folder);
+    callback(normalizeCepPath(result.data[0]));
   }
 };
 
@@ -319,9 +373,38 @@ export const selectFile = (
     window.cep.fs.showOpenDialogEx || window.cep.fs.showOpenDialog
   )(false, false, msg, dir) as IOpenDialogResult;
   if (result.data?.length > 0) {
-    const folder = decodeURIComponent(result.data[0].replace("file://", ""));
-    callback(folder);
+    callback(normalizeCepPath(result.data[0]));
   }
+};
+
+type CepSaveDialogFn = (
+  title: string,
+  initialPath: string,
+  fileTypes: string[],
+  defaultName: string,
+  friendlyFilePrefix: string,
+  prompt: string,
+  nameFieldLabel: string,
+) => { data: string; err: number };
+
+export const selectSaveFile = (opts: {
+  title: string;
+  defaultName: string;
+  fileTypes: string[];
+  initialPath?: string;
+}): string | undefined => {
+  const fn = window.cep.fs.showSaveDialogEx as unknown as CepSaveDialogFn;
+  const result = fn(
+    opts.title,
+    opts.initialPath ?? "",
+    opts.fileTypes,
+    opts.defaultName,
+    "",
+    "",
+    "",
+  );
+  if (!result.data) return undefined;
+  return normalizeCepPath(result.data);
 };
 
 /**

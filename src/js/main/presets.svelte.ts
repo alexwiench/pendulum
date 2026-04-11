@@ -1,4 +1,8 @@
+import { debounce } from "../lib/utils/bolt";
+
 const PRESETS_KEY = "pendulum-presets";
+const MAX_PRESETS = 20;
+const SAVE_DEBOUNCE_MS = 300;
 
 export type SavedPreset = {
   id: string;
@@ -14,7 +18,13 @@ export type SavedPreset = {
 class PresetStore {
   items: SavedPreset[] = $state([]);
 
-  private _saveTimer: ReturnType<typeof setTimeout> | null = null;
+  save = debounce(() => {
+    try {
+      localStorage.setItem(PRESETS_KEY, JSON.stringify(this.items));
+    } catch {
+      // localStorage may be unavailable
+    }
+  }, SAVE_DEBOUNCE_MS);
 
   load() {
     try {
@@ -30,20 +40,8 @@ class PresetStore {
     }
   }
 
-  save() {
-    if (this._saveTimer) clearTimeout(this._saveTimer);
-    this._saveTimer = setTimeout(() => {
-      this._saveTimer = null;
-      try {
-        localStorage.setItem(PRESETS_KEY, JSON.stringify(this.items));
-      } catch {
-        // localStorage may be unavailable
-      }
-    }, 300);
-  }
-
   add(data: Omit<SavedPreset, "id" | "savedAt">) {
-    if (this.items.length >= 20) {
+    if (this.items.length >= MAX_PRESETS) {
       this.items.pop();
     }
     const preset: SavedPreset = {

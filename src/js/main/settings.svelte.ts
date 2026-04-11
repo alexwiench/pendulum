@@ -1,5 +1,9 @@
+import { fs } from "../lib/cep/node";
+import { debounce, selectSaveFile } from "../lib/utils/bolt";
+
 const STORAGE_KEY = "pendulum-settings";
 const SETTINGS_VERSION = 1;
+const SAVE_DEBOUNCE_MS = 300;
 
 export type FavoritePreset = {
   id: string;
@@ -75,6 +79,14 @@ class SettingsStore {
   updatesEnabled = $state(DEFAULTS.updatesEnabled);
   updateChannel: UpdateChannel = $state(DEFAULTS.updateChannel);
   favorites: FavoritePreset[] = $state([]);
+
+  save = debounce(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.toJSON()));
+    } catch {
+      // localStorage may be unavailable
+    }
+  }, SAVE_DEBOUNCE_MS);
 
   nextFavoriteColor(): { r: number; g: number; b: number } {
     const counts = new Map<number, number>();
@@ -215,20 +227,6 @@ class SettingsStore {
     }
   }
 
-  private _saveTimer: ReturnType<typeof setTimeout> | null = null;
-
-  save() {
-    if (this._saveTimer) clearTimeout(this._saveTimer);
-    this._saveTimer = setTimeout(() => {
-      this._saveTimer = null;
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.toJSON()));
-      } catch {
-        // localStorage may be unavailable
-      }
-    }, 300);
-  }
-
   load() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -279,13 +277,35 @@ class SettingsStore {
 
   exportToFile() {
     const json = JSON.stringify(this.toJSON(), null, 2);
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "pendulum-settings.json";
-    a.click();
-    URL.revokeObjectURL(url);
+
+    // CEP: anchor-click downloads don't work in CEF (no download manager),
+    // so use the native save dialog + Node fs.
+    if (window.cep) {
+      const filePath = selectSaveFile({
+        title: "Export Pendulum Settings",
+        defaultName: "pendulum-settings.json",
+        fileTypes: ["json"],
+      });
+      if (!filePath) return;
+      try {
+        fs.writeFileSync(filePath, json, "utf8");
+      } catch (e) {
+        alert("Failed to export settings: " + (e as Error).message);
+      }
+      return;
+    }
+
+    try {
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "pendulum-settings.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("Failed to export settings: " + (e as Error).message);
+    }
   }
 
   importFromFile(): Promise<void> {
