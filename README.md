@@ -29,6 +29,20 @@ Then enable unsigned extensions by setting a registry/plist flag:
 
 Bump the CSXS version number (`.11`) to match your installed CEP version if needed. Relaunch After Effects after this change.
 
+## Docs
+
+Documentation lives in [`site/`](site/) and is published to [alexwiench.github.io/pendulum](https://alexwiench.github.io/pendulum/) via GitHub Actions on push to `main`.
+
+To run locally:
+
+```bash
+cd site
+npm install
+npm run dev
+```
+
+Source content is in [`site/src/content/docs/`](site/src/content/docs/). The raw markdown originals in [`docs/`](docs/) serve as the authoring source of record.
+
 ## Development
 
 ```bash

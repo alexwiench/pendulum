@@ -1,0 +1,32 @@
+---
+title: Pendulum
+description: A visual easing editor panel for Adobe After Effects.
+template: splash
+hero:
+  tagline: Shape keyframe easing with a visual speed graph — drag curves, see motion, apply instantly.
+  actions:
+    - text: Get Started
+      link: /pendulum/getting-started/
+      icon: right-arrow
+    - text: GitHub
+      link: https://github.com/alexwiench/pendulum
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid stagger>
+  <Card title="Visual speed graph" icon="pencil">
+    Drag influence handles to sculpt easing. The graph updates in real time as you shape the curve.
+  </Card>
+  <Card title="Ghost curves" icon="document">
+    Overlay previous easing shapes to compare and match timing across multiple properties.
+  </Card>
+  <Card title="Presets" icon="star">
+    Save and recall your favorite easing curves as visual thumbnails with a single click.
+  </Card>
+  <Card title="Layer utilities" icon="setting">
+    Reposition anchor points and create null controllers without leaving the panel.
+  </Card>
+</CardGrid>
