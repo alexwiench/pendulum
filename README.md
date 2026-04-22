@@ -31,17 +31,15 @@ Bump the CSXS version number (`.11`) to match your installed CEP version if need
 
 ## Docs
 
-Documentation lives in [`site/`](site/) and is published to [alexwiench.github.io/pendulum](https://alexwiench.github.io/pendulum/) via GitHub Actions on push to `main`.
+The project site lives in [`site/`](site/) and is published to [alexwiench.github.io/pendulum](https://alexwiench.github.io/pendulum/) via GitHub Actions on push to `main`.
 
-To run locally:
+To preview locally, serve the `site/` directory with any static file server:
 
 ```bash
-cd site
-npm install
-npm run dev
+npx serve site
+# or
+cd site && python3 -m http.server 3000
 ```
-
-Source content is in [`site/src/content/docs/`](site/src/content/docs/). The raw markdown originals in [`docs/`](docs/) serve as the authoring source of record.
 
 ## Development
 

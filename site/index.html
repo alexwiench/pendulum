@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pendulum — Curve-based easing for After Effects</title>
+<meta name="description" content="Pendulum is an After Effects panel for shaping, saving, and re-using animation curves. Drag control points. Save presets. Keyframe faster." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+<!-- ───── NAV ───── -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="logo" href="#top">
+      <svg class="logo-mark" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 20 C 6 20, 8 4, 12 4 C 16 4, 18 20, 22 20" stroke="#4aa3ff" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+        <circle cx="12" cy="4" r="2.2" fill="#ffb25e"/>
+      </svg>
+      Pendulum
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="#getting-started">Docs</a>
+      <a href="#changelog">Changelog</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/alexwiench/pendulum" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+    <div class="nav-cta">
+      <a class="btn btn-ghost btn-sm" href="https://github.com/alexwiench/pendulum" target="_blank" rel="noopener">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        Star
+      </a>
+      <a class="btn btn-primary btn-sm" href="#install">Install</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ───── HERO ───── -->
+<section class="hero" id="top">
+  <div class="bg-grid"></div>
+  <div class="bg-glow"></div>
+  <div class="bg-glow purple"></div>
+  <div class="container">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">v1.4 · For After Effects 2022+</div>
+        <h1>Shape motion <span class="accent">one&nbsp;curve</span> at a time.</h1>
+        <p class="hero-sub">Pendulum is a panel for After Effects that lets you draw, save, and re-use animation curves. Drag the points. Ship the keyframes. Skip the math.</p>
+        <div class="hero-ctas">
+          <a class="btn btn-primary" href="#install">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.5.5 0 0 1 .5.5v8.793l2.146-2.147a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 0 1 .708-.708L7.5 10.293V1.5A.5.5 0 0 1 8 1zM3 14.5A1.5 1.5 0 0 1 1.5 13v-1a.5.5 0 0 1 1 0v1a.5.5 0 0 0 .5.5h10a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 1 1 0v1a1.5 1.5 0 0 1-1.5 1.5H3z"/></svg>
+            Install via aescripts
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/alexwiench/pendulum" target="_blank" rel="noopener">
+            View source
+          </a>
+        </div>
+        <div class="hero-meta">
+          <span>Free &amp; open source</span>
+          <span>MIT licensed</span>
+          <span>macOS · Windows</span>
+        </div>
+      </div>
+
+      <div class="curve-editor reveal">
+        <div class="ce-toolbar">
+          <span class="title">speed curve · drag the orange handles</span>
+          <button class="readout mono" id="curveReadout">cubic-bezier(0.42, 0.00, 0.58, 1.00)</button>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="curveCanvas"></canvas>
+        </div>
+        <div class="ce-presets" id="presetBar"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ───── FEATURES ───── -->
+<section id="features">
+  <div class="container">
+    <div class="section-head reveal">
+      <div class="eyebrow">What it does</div>
+      <h2>A curve editor that lives where you already work.</h2>
+      <p>Pendulum sits in an After Effects panel. No round-tripping to the graph editor, no copy/paste math from Stack Overflow.</p>
+    </div>
+
+    <div class="features-grid reveal">
+      <div class="feature">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 20c4 0 6-16 9-16s5 16 9 16"/><circle cx="9" cy="11" r="1.5" fill="currentColor" stroke="none"/><circle cx="15" cy="11" r="1.5" fill="currentColor" stroke="none"/></svg>
+        <h3>Drag to design</h3>
+        <p>Grab a control point, drag it, watch your animation update live. Overshoot, anticipate, or glide &mdash; it's all in the curve.</p>
+      </div>
+      <div class="feature">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/></svg>
+        <h3>Preset library</h3>
+        <p>Save any curve as a named preset with its own color tag. Build a personal library or share one across a team.</p>
+      </div>
+      <div class="feature">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        <h3>One-click apply</h3>
+        <p>Select keyframes, click a preset, done. Pendulum rewrites the keyframe interpolation for you in a single undoable step.</p>
+      </div>
+      <div class="feature">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 17l4-4 3 3 5-7 4 5"/></svg>
+        <h3>Reads any keyframes</h3>
+        <p>Drop in on existing keyframes and Pendulum infers the curve &mdash; tweak it, save it, keep moving.</p>
+      </div>
+      <div class="feature">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+        <h3>Grid of thumbnails</h3>
+        <p>Your presets live as tiny, color-tagged curve previews so you can spot the one you want at a glance.</p>
+      </div>
+      <div class="feature">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>
+        <h3>Non-destructive</h3>
+        <p>Pendulum never modifies layers beyond the keyframes you apply it to. Undo works like you'd expect.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───── INSTALL ───── -->
+<section id="install">
+  <div class="container">
+    <div class="section-head reveal">
+      <div class="eyebrow">Install</div>
+      <h2>Get it running in under a minute.</h2>
+      <p>Grab the latest build from aescripts, or clone the repo and side-load it.</p>
+    </div>
+
+    <div class="install-grid reveal">
+      <div class="install-card">
+        <span class="num">01 · RECOMMENDED</span>
+        <h3>Install via aescripts</h3>
+        <p>The aescripts Manager installs Pendulum into your After Effects ScriptUI Panels folder automatically, and keeps it updated.</p>
+        <a class="btn btn-primary" href="#">Download from aescripts →</a>
+      </div>
+      <div class="install-card">
+        <span class="num">02 · MANUAL</span>
+        <h3>Build from source</h3>
+        <p>Clone the repo and run the build script. Copy the output <code class="inline">Pendulum.jsx</code> into your ScriptUI Panels folder, then restart After Effects.</p>
+        <a class="btn btn-ghost" href="https://github.com/alexwiench/pendulum" target="_blank" rel="noopener">Open on GitHub →</a>
+      </div>
+    </div>
+
+    <div class="callout reveal" style="margin-top:32px;">
+      <strong style="color:var(--text)">After installing:</strong> open After Effects, then go to <span class="mono">Window → Pendulum.jsx</span>. The panel will dock like any other.
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ───── DOCS / GETTING STARTED ───── -->
+<section id="getting-started">
+  <div class="container">
+    <div class="section-head reveal">
+      <div class="eyebrow">Docs</div>
+      <h2>Getting started.</h2>
+      <p>Everything you need to know, in the order you'll need it.</p>
+    </div>
+
+    <div class="docs-layout">
+      <aside class="docs-nav reveal">
+        <div class="group">Start</div>
+        <a href="#doc-open">Opening the panel</a>
+        <a href="#doc-curve">Drawing your first curve</a>
+        <a href="#doc-apply">Applying to keyframes</a>
+        <div class="group">Presets</div>
+        <a href="#doc-save">Saving a preset</a>
+        <a href="#doc-tags">Color tags</a>
+        <a href="#doc-library">Managing your library</a>
+        <div class="group">Reference</div>
+        <a href="#doc-shortcuts">Keyboard shortcuts</a>
+        <a href="#doc-tips">Tips &amp; tricks</a>
+      </aside>
+
+      <div class="docs-content">
+        <div class="doc-block reveal" id="doc-open">
+          <h2>Opening the panel</h2>
+          <p>After installing, launch After Effects and choose <span class="mono">Window → Pendulum.jsx</span> from the menu bar. The panel will dock into your workspace like any other. We recommend parking it next to your <strong>Timeline</strong> &mdash; it's where you'll spend most of your time with it.</p>
+        </div>
+
+        <div class="doc-block reveal" id="doc-curve">
+          <h2>Drawing your first curve</h2>
+          <p>The graph shows a <strong>speed curve</strong> &mdash; velocity over time. Under the hood it's a <span class="mono">cubic-bezier(x1, 0, x2, 1)</span> position curve, and Pendulum plots its derivative so you can see the shape of the motion's pacing.</p>
+          <ol>
+            <li><strong>Drag the orange handles</strong> along the baseline. The left handle controls <em>influence in</em> (how long the move takes to get going), the right one controls <em>influence out</em> (how long it takes to settle).</li>
+            <li><strong>Watch the preview.</strong> The glowing dot sliding along the bottom rail is the actual animated object &mdash; its position follows the cubic-bezier.</li>
+            <li><strong>Copy the bezier string</strong> from the readout if you want to paste it into a CSS easing or AE expression.</li>
+          </ol>
+          <div class="callout">A tall narrow peak = a fast, snappy move. A wide gentle hump = a slow, smooth move. Two peaks (via an expression-driven curve) give you a bounce.</div>
+        </div>
+
+        <div class="doc-block reveal" id="doc-apply">
+          <h2>Applying to keyframes</h2>
+          <p>Pendulum applies your curve to the interpolation <em>between two adjacent keyframes</em>.</p>
+          <ol>
+            <li>Select <strong>two or more adjacent keyframes</strong> in the timeline.</li>
+            <li>Shape your curve in the Pendulum panel.</li>
+            <li>Click <strong>Apply</strong> (or press <span class="kbd">⏎</span>).</li>
+          </ol>
+          <p>Pendulum rewrites the bezier handles on the selected keyframes in one undoable step. Press <span class="kbd">⌘Z</span> / <span class="kbd">Ctrl+Z</span> to revert if you change your mind.</p>
+        </div>
+
+        <div class="doc-block reveal" id="doc-save">
+          <h2>Saving a preset</h2>
+          <p>Once you have a curve you like, click the <span class="mono">+</span> button in the preset bar. Name the preset, pick a color tag, save. It now lives in your library forever &mdash; across projects, across sessions.</p>
+        </div>
+
+        <div class="doc-block reveal" id="doc-tags">
+          <h2>Color tags</h2>
+          <p>Each preset gets a color. Use them however you like &mdash; by project, by intensity, by mood. Pendulum ships with a sensible default palette:</p>
+          <ul>
+            <li><strong style="color:var(--blue)">Blue</strong> — neutral / default</li>
+            <li><strong style="color:var(--purple)">Purple</strong> — custom / bespoke</li>
+            <li><strong style="color:var(--red)">Red</strong> — ease-in shapes</li>
+            <li><strong style="color:var(--green)">Green</strong> — ease-out shapes</li>
+            <li><strong style="color:var(--orange)">Orange</strong> — aggressive / snappy</li>
+          </ul>
+        </div>
+
+        <div class="doc-block reveal" id="doc-library">
+          <h2>Managing your library</h2>
+          <p>Right-click any preset to rename, re-tag, duplicate, or delete it. Drag presets around to reorder them. Your library is stored in your AE preferences folder and syncs with any cloud-synced preferences you already have set up.</p>
+        </div>
+
+        <div class="doc-block reveal" id="doc-shortcuts">
+          <h2>Keyboard shortcuts</h2>
+          <ul>
+            <li><span class="kbd">⏎</span> — apply current curve to selected keyframes</li>
+            <li><span class="kbd">⌥</span> + drag handle — fine-tune (10× slower)</li>
+            <li><span class="kbd">⇧</span> + drag handle — constrain to axis</li>
+            <li><span class="kbd">R</span> — reset to linear</li>
+            <li><span class="kbd">1</span>–<span class="kbd">9</span> — load preset 1–9</li>
+          </ul>
+        </div>
+
+        <div class="doc-block reveal" id="doc-tips">
+          <h2>Tips &amp; tricks</h2>
+          <p>Double-click a preset to both load <em>and</em> apply in a single action &mdash; great for speed-keyframing a whole sequence.</p>
+          <p>Hold <span class="kbd">⌥</span> when clicking a preset to apply it <em>without</em> loading it into the editor &mdash; useful when you've already got a curve you're working on and don't want to lose it.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ───── CHANGELOG ───── -->
+<section id="changelog">
+  <div class="container">
+    <div class="section-head reveal">
+      <div class="eyebrow">Changelog</div>
+      <h2>What's new.</h2>
+      <p>Every release, in reverse order. Subscribe via GitHub releases for notifications.</p>
+    </div>
+
+    <div class="changelog-list reveal">
+      <div class="release">
+        <div class="release-meta">
+          <span class="version-badge latest">v1.4.0</span>
+          <span class="release-date">Apr 12, 2026</span>
+        </div>
+        <div class="release-body">
+          <h3>Overshoot &amp; anticipation</h3>
+          <ul>
+            <li><span class="change-tag added">added</span> Control points now support values outside <span class="mono">0..1</span>, enabling true overshoot and anticipation curves.</li>
+            <li><span class="change-tag added">added</span> New default preset: <strong>Overshoot</strong>.</li>
+            <li><span class="change-tag changed">changed</span> Preset thumbnails now render full curve extents including handles beyond the frame.</li>
+            <li><span class="change-tag fixed">fixed</span> Applying a curve to reversed keyframes no longer mirrors handles.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="release">
+        <div class="release-meta">
+          <span class="version-badge">v1.3.2</span>
+          <span class="release-date">Feb 28, 2026</span>
+        </div>
+        <div class="release-body">
+          <h3>Quality-of-life</h3>
+          <ul>
+            <li><span class="change-tag added">added</span> <span class="kbd">⌥</span>-click on a preset to apply without loading.</li>
+            <li><span class="change-tag fixed">fixed</span> Panel no longer loses its preset library when AE's preferences folder gets reset.</li>
+            <li><span class="change-tag fixed">fixed</span> Hi-DPI rendering on Windows displays above 150% scaling.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="release">
+        <div class="release-meta">
+          <span class="version-badge">v1.3.0</span>
+          <span class="release-date">Jan 14, 2026</span>
+        </div>
+        <div class="release-body">
+          <h3>Color tags &amp; library polish</h3>
+          <ul>
+            <li><span class="change-tag added">added</span> Color tags for presets (5-color palette).</li>
+            <li><span class="change-tag added">added</span> Drag-to-reorder in the preset grid.</li>
+            <li><span class="change-tag changed">changed</span> Preset bar is now scrollable when you have more than 12 presets.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="release">
+        <div class="release-meta">
+          <span class="version-badge">v1.2.0</span>
+          <span class="release-date">Nov 3, 2025</span>
+        </div>
+        <div class="release-body">
+          <h3>Multi-keyframe apply</h3>
+          <ul>
+            <li><span class="change-tag added">added</span> Apply a curve across multiple adjacent keyframe pairs in one action.</li>
+            <li><span class="change-tag added">added</span> Keyboard shortcuts <span class="kbd">1</span>–<span class="kbd">9</span> for fast preset recall.</li>
+            <li><span class="change-tag removed">removed</span> Legacy "Graph Editor sync" mode. Use native AE curves instead.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="release">
+        <div class="release-meta">
+          <span class="version-badge">v1.1.0</span>
+          <span class="release-date">Aug 18, 2025</span>
+        </div>
+        <div class="release-body">
+          <h3>Preset library</h3>
+          <ul>
+            <li><span class="change-tag added">added</span> Save any curve as a named preset.</li>
+            <li><span class="change-tag added">added</span> Grid of thumbnail previews with live redraws.</li>
+            <li><span class="change-tag fixed">fixed</span> Curve readout now shows 2 decimal places consistently.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="release">
+        <div class="release-meta">
+          <span class="version-badge">v1.0.0</span>
+          <span class="release-date">Jun 2, 2025</span>
+        </div>
+        <div class="release-body">
+          <h3>Initial release</h3>
+          <ul>
+            <li><span class="change-tag added">added</span> Interactive cubic-bezier curve editor.</li>
+            <li><span class="change-tag added">added</span> Apply-to-keyframes action.</li>
+            <li><span class="change-tag added">added</span> Five built-in presets (Linear, Ease In, Ease Out, Ease In/Out, Snappy).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ───── FAQ ───── -->
+<section id="faq">
+  <div class="container">
+    <div class="section-head reveal">
+      <div class="eyebrow">FAQ</div>
+      <h2>Questions people ask.</h2>
+    </div>
+
+    <div class="faq-list reveal">
+      <details class="faq">
+        <summary>Which versions of After Effects are supported?</summary>
+        <div class="faq-body">Pendulum is tested on After Effects 2022 through the current release. It's a ScriptUI panel, so anything that supports <span class="mono">.jsx</span> panels should work &mdash; but older CC versions aren't officially supported.</div>
+      </details>
+      <details class="faq">
+        <summary>Is it really free?</summary>
+        <div class="faq-body">Yep. Pendulum is MIT-licensed and free forever. If it saves you time, starring the repo helps more people find it.</div>
+      </details>
+      <details class="faq">
+        <summary>Can I share my preset library with teammates?</summary>
+        <div class="faq-body">Yes. Your library is a single JSON file. Export it from the panel menu, drop it in Dropbox / a shared folder, and teammates can import it on their end.</div>
+      </details>
+      <details class="faq">
+        <summary>Does it work with expressions or only keyframes?</summary>
+        <div class="faq-body">Pendulum applies to keyframe interpolation. If you need a curve inside an expression, copy the <span class="mono">cubic-bezier()</span> readout from the editor and paste the four numbers into your own <span class="mono">bezier()</span> expression.</div>
+      </details>
+      <details class="faq">
+        <summary>I found a bug / want a feature.</summary>
+        <div class="faq-body">Open an issue on <a href="https://github.com/alexwiench/pendulum/issues">GitHub</a>. Pendulum is actively maintained and PRs are welcome.</div>
+      </details>
+      <details class="faq">
+        <summary>Why is it called Pendulum?</summary>
+        <div class="faq-body">Good motion has swing &mdash; a sense of weight, of easing in and out of rest. A pendulum is the simplest system that has it.</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ───── FOOTER ───── -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div class="logo">
+        <svg class="logo-mark" viewBox="0 0 24 24" fill="none">
+          <path d="M2 20 C 6 20, 8 4, 12 4 C 16 4, 18 20, 22 20" stroke="#4aa3ff" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+          <circle cx="12" cy="4" r="2.2" fill="#ffb25e"/>
+        </svg>
+        Pendulum
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/alexwiench/pendulum" target="_blank" rel="noopener">GitHub</a>
+        <a href="#changelog">Changelog</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/alexwiench/pendulum/issues" target="_blank" rel="noopener">Issues</a>
+      </div>
+      <div class="mono">MIT · © 2026 Alex Wiench</div>
+    </div>
+  </div>
+</footer>
+
+<script src="./curve-editor.js"></script>
+<script src="./site.js"></script>
+</body>
+</html>

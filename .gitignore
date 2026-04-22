@@ -25,6 +25,12 @@ Thumbs.db
 *.swp
 *.swo
 
+# Claude
+.claude/
+
+# Design temp
+updated-designs/
+
 # Logs
 *.log
 npm-debug.log*
