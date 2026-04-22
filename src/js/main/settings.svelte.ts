@@ -48,8 +48,6 @@ const DEFAULT_FAVORITES: Array<Omit<FavoritePreset, "id" | "createdAt">> = [
   { x1: 0.25, y1: 0, x2: 0, y2: 1, name: "Smooth Decel", color: FAVORITE_PALETTE[3] },
 ];
 
-export type UpdateChannel = "stable" | "beta";
-
 const DEFAULTS = {
   autoApply: true,
   graphFillColor: "rgba(74, 158, 255, 0.08)",
@@ -61,8 +59,6 @@ const DEFAULTS = {
   selectionPollInterval: 1000,
   ghostStrokeOpacity: 0.2,
   ghostFillOpacity: 0.03,
-  updatesEnabled: true,
-  updateChannel: "stable" as UpdateChannel,
 };
 
 class SettingsStore {
@@ -76,8 +72,6 @@ class SettingsStore {
   selectionPollInterval = $state(DEFAULTS.selectionPollInterval);
   ghostStrokeOpacity = $state(DEFAULTS.ghostStrokeOpacity);
   ghostFillOpacity = $state(DEFAULTS.ghostFillOpacity);
-  updatesEnabled = $state(DEFAULTS.updatesEnabled);
-  updateChannel: UpdateChannel = $state(DEFAULTS.updateChannel);
   favorites: FavoritePreset[] = $state([]);
 
   save = debounce(() => {
@@ -170,8 +164,6 @@ class SettingsStore {
       selectionPollInterval: this.selectionPollInterval,
       ghostStrokeOpacity: this.ghostStrokeOpacity,
       ghostFillOpacity: this.ghostFillOpacity,
-      updatesEnabled: this.updatesEnabled,
-      updateChannel: this.updateChannel,
       favorites: this.favorites.map((f) => ({ ...f, color: { ...f.color } })),
     };
   }
@@ -201,8 +193,6 @@ class SettingsStore {
       this.ghostStrokeOpacity = data.ghostStrokeOpacity;
     if (typeof data.ghostFillOpacity === "number" && data.ghostFillOpacity >= 0 && data.ghostFillOpacity <= 1)
       this.ghostFillOpacity = data.ghostFillOpacity;
-    if (typeof data.updatesEnabled === "boolean") this.updatesEnabled = data.updatesEnabled;
-    if (data.updateChannel === "stable" || data.updateChannel === "beta") this.updateChannel = data.updateChannel;
     if (Array.isArray(data.favorites)) {
       const valid: FavoritePreset[] = [];
       for (const f of data.favorites) {
@@ -269,8 +259,6 @@ class SettingsStore {
     this.selectionPollInterval = DEFAULTS.selectionPollInterval;
     this.ghostStrokeOpacity = DEFAULTS.ghostStrokeOpacity;
     this.ghostFillOpacity = DEFAULTS.ghostFillOpacity;
-    this.updatesEnabled = DEFAULTS.updatesEnabled;
-    this.updateChannel = DEFAULTS.updateChannel;
     this.favorites = [];
     this.save();
   }

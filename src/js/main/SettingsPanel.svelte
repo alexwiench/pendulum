@@ -1,6 +1,5 @@
 <script lang="ts">
   import { settings } from "./settings.svelte";
-  import { updater } from "./updater.svelte";
   import { version } from "../../shared/shared";
   import { evalTS } from "../lib/utils/bolt";
 
@@ -199,46 +198,12 @@
       </div>
     </div>
 
-    <!-- Updates -->
+    <!-- Version -->
     <div class="section">
-      <div class="section-title">Updates</div>
+      <div class="section-title">Version</div>
       <div class="row">
-        <span class="label-text">Version</span>
         <span class="version-value">{version}</span>
       </div>
-      <label class="row">
-        <input
-          type="checkbox"
-          checked={settings.updatesEnabled}
-          onchange={(e) => saveAfter(() => settings.updatesEnabled = (e.target as HTMLInputElement).checked)}
-        />
-        <span class="label-text">Check for updates</span>
-      </label>
-      <div class="row">
-        <span class="label-text">Channel</span>
-        <select
-          class="text-input channel-select"
-          value={settings.updateChannel}
-          onchange={(e) => saveAfter(() => settings.updateChannel = (e.target as HTMLSelectElement).value as "stable" | "beta")}
-        >
-          <option value="stable">Stable</option>
-          <option value="beta">Beta</option>
-        </select>
-      </div>
-      <div class="button-group">
-        <button class="action-btn" onclick={() => updater.checkForUpdates(true)} disabled={updater.checking}>
-          {updater.checking ? "Checking..." : "Check Now"}
-        </button>
-      </div>
-      {#if updater.installSource === "exchange" || updater.installSource === "aescripts"}
-        <div class="managed-warning">Managed install detected. Updates are handled by {updater.installSource}.</div>
-      {/if}
-      {#if updater.error}
-        <div class="update-error">{updater.error}</div>
-      {/if}
-      {#if updater.showBanner}
-        <div class="update-available">v{updater.updateAvailable!.version} available</div>
-      {/if}
     </div>
   </div>
 </div>
@@ -476,39 +441,12 @@
     color: #999;
   }
 
-  /* Version & update info */
+  /* Version */
   .version-value {
     font-family: monospace;
     font-size: 10px;
     color: #666;
     margin-left: auto;
-  }
-
-  .channel-select {
-    margin-left: auto;
-    width: 72px;
-    padding: 3px 4px;
-    cursor: pointer;
-  }
-
-  .managed-warning {
-    font-size: 10px;
-    color: #888;
-    padding: 4px 0 2px;
-    line-height: 1.3;
-  }
-
-  .update-error {
-    font-size: 10px;
-    color: #d44;
-    padding: 4px 0 2px;
-  }
-
-  .update-available {
-    font-size: 10px;
-    color: #f5a623;
-    padding: 4px 0 2px;
-    font-weight: 600;
   }
 
   /* Hide number input spinners */
